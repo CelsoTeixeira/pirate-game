@@ -48,6 +48,10 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     return this.hp <= 0;
   }
 
+  get heading() {
+    return Phaser.Math.Angle.Normalize(this.rotation + TEXTURE_FACING_OFFSET);
+  }
+
   move(direction: Phaser.Math.Vector2, deltaMs: number) {
     if (this.isDestroyed || direction.lengthSq() === 0) {
       this.setVelocity(0, 0);

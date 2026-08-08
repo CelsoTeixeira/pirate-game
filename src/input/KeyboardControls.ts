@@ -5,6 +5,7 @@ type MovementKey = 'up' | 'down' | 'left' | 'right';
 export class KeyboardControls {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys?: Record<MovementKey, Phaser.Input.Keyboard.Key>;
+  private aimToggleKey?: Phaser.Input.Keyboard.Key;
 
   constructor(scene: Phaser.Scene) {
     const keyboard = scene.input.keyboard;
@@ -20,6 +21,7 @@ export class KeyboardControls {
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     }) as Record<MovementKey, Phaser.Input.Keyboard.Key>;
+    this.aimToggleKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
   getDirection(): Phaser.Math.Vector2 {
@@ -32,5 +34,9 @@ export class KeyboardControls {
       Number(Boolean(right)) - Number(Boolean(left)),
       Number(Boolean(down)) - Number(Boolean(up)),
     );
+  }
+
+  isAimTogglePressed(): boolean {
+    return Boolean(this.aimToggleKey && Phaser.Input.Keyboard.JustDown(this.aimToggleKey));
   }
 }
