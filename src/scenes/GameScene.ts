@@ -108,26 +108,26 @@ export class GameScene extends Phaser.Scene {
     this.cannonArcGraphics.clear();
     this.cannonArcGraphics.fillStyle(CANNON_ARC_COLOR, CANNON_ARC_FILL_ALPHA);
 
-    for (const centerAngle of ship.cannonArcCenterAngles) {
+    for (const arc of ship.cannonArcs) {
       this.cannonArcGraphics.slice(
         ship.x,
         ship.y,
-        ship.cannonMaxRange,
-        centerAngle - ship.cannonArcHalfAngle,
-        centerAngle + ship.cannonArcHalfAngle,
+        arc.range,
+        arc.centerAngle - arc.halfAngle,
+        arc.centerAngle + arc.halfAngle,
       );
       this.cannonArcGraphics.fillPath();
     }
 
     this.cannonArcGraphics.lineStyle(CANNON_ARC_STROKE_WIDTH, CANNON_ARC_COLOR, CANNON_ARC_STROKE_ALPHA);
 
-    for (const centerAngle of ship.cannonArcCenterAngles) {
+    for (const arc of ship.cannonArcs) {
       this.cannonArcGraphics.slice(
         ship.x,
         ship.y,
-        ship.cannonMaxRange,
-        centerAngle - ship.cannonArcHalfAngle,
-        centerAngle + ship.cannonArcHalfAngle,
+        arc.range,
+        arc.centerAngle - arc.halfAngle,
+        arc.centerAngle + arc.halfAngle,
       );
       this.cannonArcGraphics.strokePath();
     }

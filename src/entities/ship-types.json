@@ -1,0 +1,42 @@
+{
+  "pirate": {
+    "texture": "ship-pirate",
+    "stats": {
+      "maxHp": 100,
+      "speed": 220,
+      "turnSpeed": 6
+    },
+    "cannons": [
+      {
+        "direction": -45,
+        "halfAngle": 50,
+        "range": 320
+      },
+      {
+        "direction": 45,
+        "halfAngle": 50,
+        "range": 320
+      }
+    ]
+  },
+  "white": {
+    "texture": "ship-white",
+    "stats": {
+      "maxHp": 100,
+      "speed": 220,
+      "turnSpeed": 6
+    },
+    "cannons": [
+      {
+        "direction": -90,
+        "halfAngle": 55,
+        "range": 320
+      },
+      {
+        "direction": 90,
+        "halfAngle": 55,
+        "range": 320
+      }
+    ]
+  }
+}

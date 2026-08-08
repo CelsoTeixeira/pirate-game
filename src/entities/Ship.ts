@@ -1,40 +1,58 @@
 import Phaser from 'phaser';
+import shipTypes from './ship-types.json';
 
-export type ShipVariant = 'pirate' | 'white';
-
-type ShipConfig = {
-  maxHp?: number;
-  speed?: number;
-  turnSpeed?: number;
-  cannonMaxRange?: number;
-  cannonArcHalfAngle?: number;
+type ShipCannonDefinition = {
+  direction: number;
+  halfAngle: number;
+  range: number;
 };
 
+export type ShipTypeDefinition = {
+  texture: string;
+  stats: {
+    maxHp: number;
+    speed: number;
+    turnSpeed: number;
+  };
+  cannons: ShipCannonDefinition[];
+};
+
+export type ShipTypeKey = keyof typeof shipTypes;
+
+type CannonArc = {
+  centerAngle: number;
+  halfAngle: number;
+  range: number;
+};
+
+const shipTypeDefinitions: Record<string, ShipTypeDefinition> = shipTypes;
 const TEXTURE_FACING_OFFSET = Math.PI / 2;
 const DAMAGE_STATES = ['', '-half-damage', '-full-damage', '-destroyed'] as const;
-const DEFAULT_CANNON_MAX_RANGE = 320;
-const DEFAULT_CANNON_ARC_HALF_ANGLE = Phaser.Math.DegToRad(55);
 
 export class Ship extends Phaser.Physics.Arcade.Sprite {
   public readonly maxHp: number;
   public hp: number;
   public readonly speed: number;
   public readonly turnSpeed: number;
-  public readonly cannonMaxRange: number;
-  public readonly cannonArcHalfAngle: number;
 
-  private readonly variant: ShipVariant;
+  private readonly textureBase: string;
+  private readonly localCannonArcs: CannonArc[];
 
-  constructor(scene: Phaser.Scene, x: number, y: number, variant: ShipVariant, config: ShipConfig = {}) {
-    super(scene, x, y, Ship.getTextureKey(variant));
+  constructor(scene: Phaser.Scene, x: number, y: number, type: ShipTypeKey) {
+    const definition = shipTypeDefinitions[type];
 
-    this.variant = variant;
-    this.maxHp = config.maxHp ?? 100;
+    super(scene, x, y, definition.texture);
+
+    this.textureBase = definition.texture;
+    this.maxHp = definition.stats.maxHp;
     this.hp = this.maxHp;
-    this.speed = config.speed ?? 220;
-    this.turnSpeed = config.turnSpeed ?? 6;
-    this.cannonMaxRange = config.cannonMaxRange ?? DEFAULT_CANNON_MAX_RANGE;
-    this.cannonArcHalfAngle = config.cannonArcHalfAngle ?? DEFAULT_CANNON_ARC_HALF_ANGLE;
+    this.speed = definition.stats.speed;
+    this.turnSpeed = definition.stats.turnSpeed;
+    this.localCannonArcs = definition.cannons.map((cannon) => ({
+      centerAngle: Phaser.Math.DegToRad(cannon.direction),
+      halfAngle: Phaser.Math.DegToRad(cannon.halfAngle),
+      range: cannon.range,
+    }));
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -42,12 +60,10 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   }
 
   static preload(scene: Phaser.Scene) {
-    const variants: ShipVariant[] = ['pirate', 'white'];
-
-    for (const variant of variants) {
+    for (const definition of Object.values(shipTypeDefinitions)) {
       for (const damageState of DAMAGE_STATES) {
-        const filename = `ship-${variant}${damageState}.png`;
-        scene.load.image(filename.replace('.png', ''), `assets/${filename}`);
+        const textureKey = `${definition.texture}${damageState}`;
+        scene.load.image(textureKey, `assets/${textureKey}.png`);
       }
     }
   }
@@ -60,11 +76,12 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     return Phaser.Math.Angle.Normalize(this.rotation + TEXTURE_FACING_OFFSET);
   }
 
-  get cannonArcCenterAngles(): [number, number] {
-    return [
-      Phaser.Math.Angle.Normalize(this.heading + Math.PI / 2),
-      Phaser.Math.Angle.Normalize(this.heading - Math.PI / 2),
-    ];
+  get cannonArcs(): CannonArc[] {
+    return this.localCannonArcs.map((arc) => ({
+      centerAngle: Phaser.Math.Angle.Normalize(this.heading + arc.centerAngle),
+      halfAngle: arc.halfAngle,
+      range: arc.range,
+    }));
   }
 
   canFireAt(targetX: number, targetY: number): boolean {
@@ -73,15 +90,10 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     }
 
     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
-
-    if (distance > this.cannonMaxRange) {
-      return false;
-    }
-
     const targetAngle = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
 
-    return this.cannonArcCenterAngles.some((centerAngle) => {
-      return Math.abs(Phaser.Math.Angle.Wrap(targetAngle - centerAngle)) <= this.cannonArcHalfAngle;
+    return this.cannonArcs.some((arc) => {
+      return distance <= arc.range && Math.abs(Phaser.Math.Angle.Wrap(targetAngle - arc.centerAngle)) <= arc.halfAngle;
     });
   }
 
@@ -108,21 +120,21 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     const hpRatio = this.hp / this.maxHp;
 
     if (hpRatio > 2 / 3) {
-      return Ship.getTextureKey(this.variant);
+      return this.textureBase;
     }
 
     if (hpRatio > 1 / 3) {
-      return Ship.getTextureKey(this.variant, 'half-damage');
+      return this.getDamageTextureKey('half-damage');
     }
 
     if (hpRatio > 0) {
-      return Ship.getTextureKey(this.variant, 'full-damage');
+      return this.getDamageTextureKey('full-damage');
     }
 
-    return Ship.getTextureKey(this.variant, 'destroyed');
+    return this.getDamageTextureKey('destroyed');
   }
 
-  private static getTextureKey(variant: ShipVariant, damageState?: 'half-damage' | 'full-damage' | 'destroyed') {
-    return `ship-${variant}${damageState ? `-${damageState}` : ''}`;
+  private getDamageTextureKey(damageState: 'half-damage' | 'full-damage' | 'destroyed') {
+    return `${this.textureBase}-${damageState}`;
   }
 }
