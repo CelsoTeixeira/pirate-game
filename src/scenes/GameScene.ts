@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CannonBall } from '../entities/CannonBall';
 import { Ship } from '../entities/Ship';
+import { playShipImpact } from '../effects/effects';
 import { TargetReticle } from '../entities/TargetReticle';
 import { KeyboardControls } from '../input/KeyboardControls';
 
@@ -15,6 +16,8 @@ const CANNON_ARC_DEPTH = -10;
 
 export class GameScene extends Phaser.Scene {
   private playerShip?: Ship;
+  private enemyShip?: Ship;
+  private damageableShips: Ship[] = [];
   private controls?: KeyboardControls;
   private damageKey?: Phaser.Input.Keyboard.Key;
   private targetReticle?: TargetReticle;
@@ -41,6 +44,9 @@ export class GameScene extends Phaser.Scene {
 
     this.controls = new KeyboardControls(this);
     this.playerShip = new Ship(this, 480, 270, 'pirate');
+    this.enemyShip = new Ship(this, 720, 200, 'white');
+    this.damageableShips = [this.enemyShip];
+    this.playerShip.on('cannonball-fired', this.handlePlayerCannonBallFired, this);
     this.targetReticle = new TargetReticle(this);
     this.cannonArcGraphics = this.add.graphics();
     this.cannonArcGraphics.setDepth(CANNON_ARC_DEPTH);
@@ -75,7 +81,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.damageKey && Phaser.Input.Keyboard.JustDown(this.damageKey)) {
-      this.playerShip.takeDamage(25);
+      this.enemyShip?.takeDamage(25);
     }
   }
 
@@ -92,6 +98,24 @@ export class GameScene extends Phaser.Scene {
     const targetY = this.targetReticle.y;
 
     this.playerShip.fireAt(targetX, targetY);
+  }
+
+  private handlePlayerCannonBallFired(ball: CannonBall) {
+    for (const ship of this.damageableShips) {
+      this.physics.add.overlap(ball, ship, (ballObject, shipObject) => {
+        const cannonBall = ballObject as CannonBall;
+        const damageableShip = shipObject as Ship;
+
+        if (damageableShip === cannonBall.owner) {
+          return;
+        }
+
+        cannonBall.markHit();
+        playShipImpact(this, cannonBall.x, cannonBall.y);
+        damageableShip.takeDamage(cannonBall.damage);
+        cannonBall.destroy();
+      });
+    }
   }
 
   private drawCannonArcs(ship: Ship) {

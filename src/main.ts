@@ -21,4 +21,12 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [GameScene],
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+declare global {
+  interface Window {
+    game: Phaser.Game;
+  }
+}
+
+window.game = game;

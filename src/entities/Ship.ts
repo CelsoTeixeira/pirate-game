@@ -150,7 +150,8 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
         const x = this.x + Math.cos(angle) * CANNON_BALL_SPAWN_OFFSET;
         const y = this.y + Math.sin(angle) * CANNON_BALL_SPAWN_OFFSET;
 
-        new CannonBall(this.scene, x, y, targetX, targetY);
+        const ball = new CannonBall(this.scene, x, y, targetX, targetY, this);
+        this.emit('cannonball-fired', ball);
       }
 
       sideState.state = 'recharging';
