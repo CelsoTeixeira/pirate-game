@@ -6,16 +6,22 @@ type ShipConfig = {
   maxHp?: number;
   speed?: number;
   turnSpeed?: number;
+  cannonMaxRange?: number;
+  cannonArcHalfAngle?: number;
 };
 
 const TEXTURE_FACING_OFFSET = Math.PI / 2;
 const DAMAGE_STATES = ['', '-half-damage', '-full-damage', '-destroyed'] as const;
+const DEFAULT_CANNON_MAX_RANGE = 320;
+const DEFAULT_CANNON_ARC_HALF_ANGLE = Phaser.Math.DegToRad(55);
 
 export class Ship extends Phaser.Physics.Arcade.Sprite {
   public readonly maxHp: number;
   public hp: number;
   public readonly speed: number;
   public readonly turnSpeed: number;
+  public readonly cannonMaxRange: number;
+  public readonly cannonArcHalfAngle: number;
 
   private readonly variant: ShipVariant;
 
@@ -27,6 +33,8 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.maxHp;
     this.speed = config.speed ?? 220;
     this.turnSpeed = config.turnSpeed ?? 6;
+    this.cannonMaxRange = config.cannonMaxRange ?? DEFAULT_CANNON_MAX_RANGE;
+    this.cannonArcHalfAngle = config.cannonArcHalfAngle ?? DEFAULT_CANNON_ARC_HALF_ANGLE;
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -50,6 +58,31 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
 
   get heading() {
     return Phaser.Math.Angle.Normalize(this.rotation + TEXTURE_FACING_OFFSET);
+  }
+
+  get cannonArcCenterAngles(): [number, number] {
+    return [
+      Phaser.Math.Angle.Normalize(this.heading + Math.PI / 2),
+      Phaser.Math.Angle.Normalize(this.heading - Math.PI / 2),
+    ];
+  }
+
+  canFireAt(targetX: number, targetY: number): boolean {
+    if (this.isDestroyed) {
+      return false;
+    }
+
+    const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
+
+    if (distance > this.cannonMaxRange) {
+      return false;
+    }
+
+    const targetAngle = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
+
+    return this.cannonArcCenterAngles.some((centerAngle) => {
+      return Math.abs(Phaser.Math.Angle.Wrap(targetAngle - centerAngle)) <= this.cannonArcHalfAngle;
+    });
   }
 
   move(direction: Phaser.Math.Vector2, deltaMs: number) {

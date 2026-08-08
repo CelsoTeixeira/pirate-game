@@ -7,6 +7,8 @@ const TARGET_RING_RADIUS = 10;
 const TARGET_LINE_GAP = 12;
 const TARGET_LINE_LENGTH = 6;
 const TARGET_DEPTH = 1000;
+const TARGET_NORMAL_TINT = 0xffffff;
+const TARGET_INVALID_TINT = 0xff4444;
 
 export class TargetReticle extends Phaser.GameObjects.Image {
   constructor(scene: Phaser.Scene, x = 0, y = 0) {
@@ -18,6 +20,10 @@ export class TargetReticle extends Phaser.GameObjects.Image {
 
     this.setDepth(TARGET_DEPTH);
     this.setVisible(false);
+  }
+
+  setValid(valid: boolean) {
+    this.setTint(valid ? TARGET_NORMAL_TINT : TARGET_INVALID_TINT);
   }
 
   static ensureTexture(scene: Phaser.Scene) {
