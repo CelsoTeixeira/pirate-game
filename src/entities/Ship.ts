@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CannonBall } from './CannonBall';
+import { playShipExplosion } from '../effects/effects';
 import shipTypes from './ship-types.json';
 
 type ShipCannonDefinition = {
@@ -196,8 +197,14 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(amount: number) {
+    const wasDestroyed = this.isDestroyed;
+
     this.hp = Math.max(0, this.hp - Math.max(0, amount));
     this.setTexture(this.getCurrentTextureKey());
+
+    if (!wasDestroyed && this.isDestroyed) {
+      playShipExplosion(this.scene, this.x, this.y);
+    }
   }
 
   private getCurrentTextureKey() {
