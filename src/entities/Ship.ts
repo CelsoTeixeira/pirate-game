@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CannonBall } from './CannonBall';
 import { playShipExplosion } from '../effects/effects';
 import shipTypes from './ship-types.json';
+import { Wind } from '../world/Wind';
 
 type ShipCannonDefinition = {
   direction: number;
@@ -17,6 +18,11 @@ export type ShipTypeDefinition = {
     maxHp: number;
     speed: number;
     turnSpeed: number;
+  };
+  sailing: {
+    upwind: number;
+    beam: number;
+    downwind: number;
   };
   cannons: ShipCannonDefinition[];
 };
@@ -48,14 +54,22 @@ const shipTypeDefinitions: Record<string, ShipTypeDefinition> = shipTypes;
 const TEXTURE_FACING_OFFSET = Math.PI / 2;
 const CANNON_BALL_SPAWN_OFFSET = 36;
 const DAMAGE_STATES = ['', '-half-damage', '-full-damage', '-destroyed'] as const;
+const BASE_TURN_SPEED_STAT = 6;
+const RUDDER_RATE_AT_BASE_TURN_SPEED = 2.5;
+
+export type SailState = 0 | 1 | 2;
+export type RudderDirection = -1 | 0 | 1;
 
 export class Ship extends Phaser.Physics.Arcade.Sprite {
   public readonly maxHp: number;
   public hp: number;
   public readonly speed: number;
   public readonly turnSpeed: number;
+  public sailState: SailState = 0;
+  public anchored = false;
 
   private readonly textureBase: string;
+  private readonly sailing: ShipTypeDefinition['sailing'];
   private readonly localCannonArcs: LocalCannonArc[];
   private readonly cannonSideStates: CannonSideFiringState[];
 
@@ -69,6 +83,7 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.maxHp;
     this.speed = definition.stats.speed;
     this.turnSpeed = definition.stats.turnSpeed;
+    this.sailing = definition.sailing;
     this.localCannonArcs = definition.cannons.map((cannon) => ({
       centerAngle: Phaser.Math.DegToRad(cannon.direction),
       halfAngle: Phaser.Math.DegToRad(cannon.halfAngle),
@@ -182,18 +197,39 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
       });
   }
 
-  move(direction: Phaser.Math.Vector2, deltaMs: number) {
-    if (this.isDestroyed || direction.lengthSq() === 0) {
+  raiseSail() {
+    this.sailState = Math.min(2, this.sailState + 1) as SailState;
+  }
+
+  lowerSail() {
+    this.sailState = Math.max(0, this.sailState - 1) as SailState;
+  }
+
+  toggleAnchor() {
+    this.anchored = !this.anchored;
+  }
+
+  sail(wind: Wind, rudder: RudderDirection, deltaMs: number) {
+    if (this.isDestroyed) {
       this.setVelocity(0, 0);
       return;
     }
 
-    const velocity = direction.clone().normalize().scale(this.speed);
-    const movementAngle = Phaser.Math.Angle.Between(0, 0, velocity.x, velocity.y);
-    const targetRotation = movementAngle - TEXTURE_FACING_OFFSET;
+    const dt = deltaMs / 1000;
+    const rudderRate = this.turnSpeed * (RUDDER_RATE_AT_BASE_TURN_SPEED / BASE_TURN_SPEED_STAT);
+    this.rotation = Phaser.Math.Angle.Normalize(this.rotation + rudder * rudderRate * dt);
 
-    this.rotation = Phaser.Math.Angle.RotateTo(this.rotation, targetRotation, this.turnSpeed * (deltaMs / 1000));
-    this.setVelocity(velocity.x, velocity.y);
+    if (this.anchored) {
+      this.setVelocity(0, 0);
+      return;
+    }
+
+    const angleDiff = Math.abs(Phaser.Math.Angle.Wrap(this.heading - wind.directionRad));
+    const pointsOfSail = this.getPointsOfSailMultiplier(angleDiff);
+    const sailFactor = this.sailState / 2;
+    const speed = this.speed * sailFactor * wind.strength * pointsOfSail;
+
+    this.setVelocity(Math.cos(this.heading) * speed, Math.sin(this.heading) * speed);
   }
 
   takeDamage(amount: number) {
@@ -227,5 +263,13 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
 
   private getDamageTextureKey(damageState: 'half-damage' | 'full-damage' | 'destroyed') {
     return `${this.textureBase}-${damageState}`;
+  }
+
+  private getPointsOfSailMultiplier(angleDiff: number) {
+    if (angleDiff <= Math.PI / 2) {
+      return Phaser.Math.Linear(this.sailing.downwind, this.sailing.beam, angleDiff / (Math.PI / 2));
+    }
+
+    return Phaser.Math.Linear(this.sailing.beam, this.sailing.upwind, (angleDiff - Math.PI / 2) / (Math.PI / 2));
   }
 }

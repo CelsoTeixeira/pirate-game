@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
+import type { RudderDirection } from '../entities/Ship';
 
 type MovementKey = 'up' | 'down' | 'left' | 'right';
 
 export class KeyboardControls {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys?: Record<MovementKey, Phaser.Input.Keyboard.Key>;
+  private anchorToggleKey?: Phaser.Input.Keyboard.Key;
   private aimToggleKey?: Phaser.Input.Keyboard.Key;
 
   constructor(scene: Phaser.Scene) {
@@ -21,19 +23,33 @@ export class KeyboardControls {
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     }) as Record<MovementKey, Phaser.Input.Keyboard.Key>;
+    this.anchorToggleKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
     this.aimToggleKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
-  getDirection(): Phaser.Math.Vector2 {
+  getRudder(): RudderDirection {
     const left = this.cursors?.left.isDown || this.keys?.left.isDown;
     const right = this.cursors?.right.isDown || this.keys?.right.isDown;
-    const up = this.cursors?.up.isDown || this.keys?.up.isDown;
-    const down = this.cursors?.down.isDown || this.keys?.down.isDown;
 
-    return new Phaser.Math.Vector2(
-      Number(Boolean(right)) - Number(Boolean(left)),
-      Number(Boolean(down)) - Number(Boolean(up)),
+    return (Number(Boolean(right)) - Number(Boolean(left))) as RudderDirection;
+  }
+
+  isSailUpJustPressed(): boolean {
+    return Boolean(
+      (this.cursors?.up && Phaser.Input.Keyboard.JustDown(this.cursors.up)) ||
+        (this.keys?.up && Phaser.Input.Keyboard.JustDown(this.keys.up)),
     );
+  }
+
+  isSailDownJustPressed(): boolean {
+    return Boolean(
+      (this.cursors?.down && Phaser.Input.Keyboard.JustDown(this.cursors.down)) ||
+        (this.keys?.down && Phaser.Input.Keyboard.JustDown(this.keys.down)),
+    );
+  }
+
+  isAnchorTogglePressed(): boolean {
+    return Boolean(this.anchorToggleKey && Phaser.Input.Keyboard.JustDown(this.anchorToggleKey));
   }
 
   isAimTogglePressed(): boolean {

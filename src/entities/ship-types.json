@@ -6,6 +6,11 @@
       "speed": 220,
       "turnSpeed": 6
     },
+    "sailing": {
+      "upwind": 0.15,
+      "beam": 0.8,
+      "downwind": 1.0
+    },
     "cannons": [
       {
         "direction": -45,
@@ -29,6 +34,11 @@
       "maxHp": 100,
       "speed": 220,
       "turnSpeed": 6
+    },
+    "sailing": {
+      "upwind": 0.15,
+      "beam": 0.8,
+      "downwind": 1.0
     },
     "cannons": [
       {
