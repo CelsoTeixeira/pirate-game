@@ -10,12 +10,16 @@
       {
         "direction": -45,
         "halfAngle": 50,
-        "range": 320
+        "range": 320,
+        "cooldownMs": 2500,
+        "fuseMs": 450
       },
       {
         "direction": 45,
         "halfAngle": 50,
-        "range": 320
+        "range": 320,
+        "cooldownMs": 2500,
+        "fuseMs": 450
       }
     ]
   },
@@ -30,12 +34,16 @@
       {
         "direction": -90,
         "halfAngle": 55,
-        "range": 320
+        "range": 320,
+        "cooldownMs": 3000,
+        "fuseMs": 500
       },
       {
         "direction": 90,
         "halfAngle": 55,
-        "range": 320
+        "range": 320,
+        "cooldownMs": 3000,
+        "fuseMs": 500
       }
     ]
   }

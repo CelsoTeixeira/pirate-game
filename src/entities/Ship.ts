@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
+import { CannonBall } from './CannonBall';
 import shipTypes from './ship-types.json';
 
 type ShipCannonDefinition = {
   direction: number;
   halfAngle: number;
   range: number;
+  cooldownMs: number;
+  fuseMs: number;
 };
 
 export type ShipTypeDefinition = {
@@ -23,10 +26,26 @@ type CannonArc = {
   centerAngle: number;
   halfAngle: number;
   range: number;
+  cooldownMs: number;
+  fuseMs: number;
+  state: CannonSideState;
+};
+
+type LocalCannonArc = Omit<CannonArc, 'state'>;
+type CannonSideState = 'ready' | 'fusing' | 'recharging';
+type CannonSideFiringState = {
+  state: CannonSideState;
+  readyAt: number;
+};
+type CoveringCannonArc = {
+  index: number;
+  arc: CannonArc;
+  angleDiff: number;
 };
 
 const shipTypeDefinitions: Record<string, ShipTypeDefinition> = shipTypes;
 const TEXTURE_FACING_OFFSET = Math.PI / 2;
+const CANNON_BALL_SPAWN_OFFSET = 36;
 const DAMAGE_STATES = ['', '-half-damage', '-full-damage', '-destroyed'] as const;
 
 export class Ship extends Phaser.Physics.Arcade.Sprite {
@@ -36,7 +55,8 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   public readonly turnSpeed: number;
 
   private readonly textureBase: string;
-  private readonly localCannonArcs: CannonArc[];
+  private readonly localCannonArcs: LocalCannonArc[];
+  private readonly cannonSideStates: CannonSideFiringState[];
 
   constructor(scene: Phaser.Scene, x: number, y: number, type: ShipTypeKey) {
     const definition = shipTypeDefinitions[type];
@@ -52,6 +72,12 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
       centerAngle: Phaser.Math.DegToRad(cannon.direction),
       halfAngle: Phaser.Math.DegToRad(cannon.halfAngle),
       range: cannon.range,
+      cooldownMs: cannon.cooldownMs,
+      fuseMs: cannon.fuseMs,
+    }));
+    this.cannonSideStates = this.localCannonArcs.map(() => ({
+      state: 'ready',
+      readyAt: scene.time.now,
     }));
 
     scene.add.existing(this);
@@ -77,10 +103,13 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   }
 
   get cannonArcs(): CannonArc[] {
-    return this.localCannonArcs.map((arc) => ({
+    return this.localCannonArcs.map((arc, index) => ({
       centerAngle: Phaser.Math.Angle.Normalize(this.heading + arc.centerAngle),
       halfAngle: arc.halfAngle,
       range: arc.range,
+      cooldownMs: arc.cooldownMs,
+      fuseMs: arc.fuseMs,
+      state: this.cannonSideStates[index].state,
     }));
   }
 
@@ -89,12 +118,66 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
       return false;
     }
 
+    return this.getCoveringCannonArcs(targetX, targetY).length > 0;
+  }
+
+  canFireNowAt(targetX: number, targetY: number): boolean {
+    if (this.isDestroyed) {
+      return false;
+    }
+
+    return this.getCoveringCannonArcs(targetX, targetY, true).length > 0;
+  }
+
+  fireAt(targetX: number, targetY: number): boolean {
+    if (this.isDestroyed) {
+      return false;
+    }
+
+    const coveringArc = this.getCoveringCannonArcs(targetX, targetY, true).sort((a, b) => a.angleDiff - b.angleDiff)[0];
+
+    if (!coveringArc) {
+      return false;
+    }
+
+    const sideState = this.cannonSideStates[coveringArc.index];
+    sideState.state = 'fusing';
+    sideState.readyAt = this.scene.time.now + coveringArc.arc.fuseMs + coveringArc.arc.cooldownMs;
+
+    this.scene.time.delayedCall(coveringArc.arc.fuseMs, () => {
+      if (!this.isDestroyed) {
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
+        const x = this.x + Math.cos(angle) * CANNON_BALL_SPAWN_OFFSET;
+        const y = this.y + Math.sin(angle) * CANNON_BALL_SPAWN_OFFSET;
+
+        new CannonBall(this.scene, x, y, targetX, targetY);
+      }
+
+      sideState.state = 'recharging';
+      sideState.readyAt = this.scene.time.now + coveringArc.arc.cooldownMs;
+
+      this.scene.time.delayedCall(coveringArc.arc.cooldownMs, () => {
+        sideState.state = 'ready';
+        sideState.readyAt = this.scene.time.now;
+      });
+    });
+
+    return true;
+  }
+
+  private getCoveringCannonArcs(targetX: number, targetY: number, readyOnly = false): CoveringCannonArc[] {
     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
     const targetAngle = Phaser.Math.Angle.Between(this.x, this.y, targetX, targetY);
 
-    return this.cannonArcs.some((arc) => {
-      return distance <= arc.range && Math.abs(Phaser.Math.Angle.Wrap(targetAngle - arc.centerAngle)) <= arc.halfAngle;
-    });
+    return this.cannonArcs
+      .map((arc, index) => ({
+        index,
+        arc,
+        angleDiff: Math.abs(Phaser.Math.Angle.Wrap(targetAngle - arc.centerAngle)),
+      }))
+      .filter(({ arc, angleDiff }) => {
+        return distance <= arc.range && angleDiff <= arc.halfAngle && (!readyOnly || arc.state === 'ready');
+      });
   }
 
   move(direction: Phaser.Math.Vector2, deltaMs: number) {

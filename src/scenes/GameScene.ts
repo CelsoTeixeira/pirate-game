@@ -4,10 +4,12 @@ import { Ship } from '../entities/Ship';
 import { TargetReticle } from '../entities/TargetReticle';
 import { KeyboardControls } from '../input/KeyboardControls';
 
-const CANNON_BALL_SPAWN_OFFSET = 36;
 const CANNON_ARC_COLOR = 0xff4444;
+const CANNON_ARC_DISABLED_COLOR = 0x888888;
 const CANNON_ARC_FILL_ALPHA = 0.08;
+const CANNON_ARC_DISABLED_FILL_ALPHA = 0.04;
 const CANNON_ARC_STROKE_ALPHA = 0.25;
+const CANNON_ARC_DISABLED_STROKE_ALPHA = 0.15;
 const CANNON_ARC_STROKE_WIDTH = 1;
 const CANNON_ARC_DEPTH = -10;
 
@@ -68,7 +70,7 @@ export class GameScene extends Phaser.Scene {
       const pointer = this.input.activePointer;
 
       this.targetReticle.setPosition(pointer.worldX, pointer.worldY);
-      this.targetReticle.setValid(this.playerShip.canFireAt(this.targetReticle.x, this.targetReticle.y));
+      this.targetReticle.setValid(this.playerShip.canFireNowAt(this.targetReticle.x, this.targetReticle.y));
       this.drawCannonArcs(this.playerShip);
     }
 
@@ -89,15 +91,7 @@ export class GameScene extends Phaser.Scene {
     const targetX = this.targetReticle.x;
     const targetY = this.targetReticle.y;
 
-    if (!this.playerShip.canFireAt(targetX, targetY)) {
-      return;
-    }
-
-    const angle = Phaser.Math.Angle.Between(this.playerShip.x, this.playerShip.y, targetX, targetY);
-    const x = this.playerShip.x + Math.cos(angle) * CANNON_BALL_SPAWN_OFFSET;
-    const y = this.playerShip.y + Math.sin(angle) * CANNON_BALL_SPAWN_OFFSET;
-
-    new CannonBall(this, x, y, targetX, targetY);
+    this.playerShip.fireAt(targetX, targetY);
   }
 
   private drawCannonArcs(ship: Ship) {
@@ -106,9 +100,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.cannonArcGraphics.clear();
-    this.cannonArcGraphics.fillStyle(CANNON_ARC_COLOR, CANNON_ARC_FILL_ALPHA);
 
     for (const arc of ship.cannonArcs) {
+      const isReady = arc.state === 'ready';
+      this.cannonArcGraphics.fillStyle(
+        isReady ? CANNON_ARC_COLOR : CANNON_ARC_DISABLED_COLOR,
+        isReady ? CANNON_ARC_FILL_ALPHA : CANNON_ARC_DISABLED_FILL_ALPHA,
+      );
       this.cannonArcGraphics.slice(
         ship.x,
         ship.y,
@@ -119,9 +117,13 @@ export class GameScene extends Phaser.Scene {
       this.cannonArcGraphics.fillPath();
     }
 
-    this.cannonArcGraphics.lineStyle(CANNON_ARC_STROKE_WIDTH, CANNON_ARC_COLOR, CANNON_ARC_STROKE_ALPHA);
-
     for (const arc of ship.cannonArcs) {
+      const isReady = arc.state === 'ready';
+      this.cannonArcGraphics.lineStyle(
+        CANNON_ARC_STROKE_WIDTH,
+        isReady ? CANNON_ARC_COLOR : CANNON_ARC_DISABLED_COLOR,
+        isReady ? CANNON_ARC_STROKE_ALPHA : CANNON_ARC_DISABLED_STROKE_ALPHA,
+      );
       this.cannonArcGraphics.slice(
         ship.x,
         ship.y,
