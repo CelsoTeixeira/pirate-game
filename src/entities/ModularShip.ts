@@ -1,0 +1,125 @@
+import Phaser from 'phaser';
+
+export type ModularShipSize = 'small' | 'medium' | 'big';
+export type ModularShipSailState = 'closed' | 'partial' | 'open';
+
+export type ModularShipConfig = {
+  size: ModularShipSize;
+  sailState: ModularShipSailState;
+};
+
+type ShipLayout = {
+  cannonX: number;
+  cannonScale: number;
+  minCannonY: number;
+  maxCannonY: number;
+  dropZoneWidth: number;
+  dropZoneHeight: number;
+};
+
+const SHIP_PARTS_PATH = 'assets/ship-parts';
+const MODULAR_SHIP_CANNON_TEXTURE_KEY = 'modular-ship-cannon';
+const SHIP_SIZES: readonly ModularShipSize[] = ['small', 'medium', 'big'];
+const SAIL_STATES: readonly ModularShipSailState[] = ['closed', 'partial', 'open'];
+const CANNON_HIT_AREA = new Phaser.Geom.Rectangle(300, 400, 700, 450);
+
+const SHIP_LAYOUTS: Record<ModularShipSize, ShipLayout> = {
+  small: {
+    cannonX: 58,
+    cannonScale: 0.08,
+    minCannonY: -90,
+    maxCannonY: 85,
+    dropZoneWidth: 190,
+    dropZoneHeight: 330,
+  },
+  medium: {
+    cannonX: 142,
+    cannonScale: 0.11,
+    minCannonY: -220,
+    maxCannonY: 230,
+    dropZoneWidth: 380,
+    dropZoneHeight: 560,
+  },
+  big: {
+    cannonX: 216,
+    cannonScale: 0.14,
+    minCannonY: -290,
+    maxCannonY: 290,
+    dropZoneWidth: 560,
+    dropZoneHeight: 700,
+  },
+};
+
+function getPartTextureKey(size: ModularShipSize, part: 'base' | 'poles') {
+  return `modular-ship-${size}-${part}`;
+}
+
+function getSailsTextureKey(size: ModularShipSize, sailState: ModularShipSailState) {
+  return `modular-ship-${size}-sails-${sailState}`;
+}
+
+export class ModularShip extends Phaser.GameObjects.Container {
+  public readonly config: ModularShipConfig;
+  public readonly cannonDropZone: Phaser.GameObjects.Zone;
+
+  private readonly layout: ShipLayout;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, config: ModularShipConfig) {
+    super(scene, x, y);
+
+    this.config = { ...config };
+    this.layout = SHIP_LAYOUTS[config.size];
+
+    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'base')));
+    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'poles')));
+    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getSailsTextureKey(config.size, config.sailState)));
+
+    this.cannonDropZone = new Phaser.GameObjects.Zone(
+      scene,
+      0,
+      0,
+      this.layout.dropZoneWidth,
+      this.layout.dropZoneHeight,
+    );
+    this.cannonDropZone.setRectangleDropZone(this.layout.dropZoneWidth, this.layout.dropZoneHeight);
+    this.add(this.cannonDropZone);
+
+    scene.add.existing(this);
+  }
+
+  static preload(scene: Phaser.Scene) {
+    scene.load.image(MODULAR_SHIP_CANNON_TEXTURE_KEY, `${SHIP_PARTS_PATH}/cannons/ship_cannon.png`);
+
+    for (const size of SHIP_SIZES) {
+      scene.load.image(getPartTextureKey(size, 'base'), `${SHIP_PARTS_PATH}/base/pirate_ship_${size}_base.png`);
+      scene.load.image(getPartTextureKey(size, 'poles'), `${SHIP_PARTS_PATH}/poles/pirate_ship_${size}_poles.png`);
+
+      for (const sailState of SAIL_STATES) {
+        scene.load.image(
+          getSailsTextureKey(size, sailState),
+          `${SHIP_PARTS_PATH}/sails/pirate_ship_${size}_sails_${sailState}.png`,
+        );
+      }
+    }
+  }
+
+  createCannon(x: number, y: number) {
+    return new Phaser.GameObjects.Image(this.scene, x, y, MODULAR_SHIP_CANNON_TEXTURE_KEY)
+      .setInteractive(CANNON_HIT_AREA, Phaser.Geom.Rectangle.Contains);
+  }
+
+  mountCannon(cannon: Phaser.GameObjects.Image, worldX: number, worldY: number) {
+    const localPoint = this.pointToContainer({ x: worldX, y: worldY });
+
+    this.addAt(cannon, 1);
+    cannon.setPosition(localPoint.x, localPoint.y);
+    this.repositionCannon(cannon);
+  }
+
+  repositionCannon(cannon: Phaser.GameObjects.Image) {
+    cannon.x = cannon.x < 0 ? -this.layout.cannonX : this.layout.cannonX;
+    cannon.y = Phaser.Math.Clamp(cannon.y, this.layout.minCannonY, this.layout.maxCannonY);
+    cannon.setScale(this.layout.cannonScale);
+    cannon.setFlipX(cannon.x < 0);
+  }
+}
