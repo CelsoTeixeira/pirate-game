@@ -18,6 +18,7 @@ const DELETE_Y = 52;
 export class CannonTransformGizmo {
   private readonly container: Phaser.GameObjects.Container;
   private readonly rotationKnob: Phaser.GameObjects.Arc;
+  private readonly interactiveControls: Phaser.GameObjects.GameObject[];
   private ship?: ModularShip;
   private cannon?: Phaser.GameObjects.Image;
   private axisDrag?: AxisDragSnapshot;
@@ -112,6 +113,7 @@ export class CannonTransformGizmo {
       deleteHandle,
       deleteArtwork,
     ]);
+    this.interactiveControls = [xHitTarget, yHitTarget, this.rotationKnob, deleteHandle];
     scene.add.existing(this.container);
 
     scene.input.setDraggable(xHitTarget);
@@ -141,6 +143,7 @@ export class CannonTransformGizmo {
   select(ship: ModularShip, cannon: Phaser.GameObjects.Image) {
     this.ship = ship;
     this.cannon = cannon;
+    this.setControlsEnabled(true);
     this.container.setVisible(true);
     this.sync();
   }
@@ -150,7 +153,12 @@ export class CannonTransformGizmo {
     this.cannon = undefined;
     this.axisDrag = undefined;
     this.previousPointerAngle = undefined;
+    this.setControlsEnabled(false);
     this.container.setVisible(false);
+  }
+
+  ignoreBy(camera: Phaser.Cameras.Scene2D.Camera) {
+    camera.ignore(this.container);
   }
 
   sync() {
@@ -261,5 +269,13 @@ export class CannonTransformGizmo {
       localPointer.x,
       localPointer.y,
     );
+  }
+
+  private setControlsEnabled(enabled: boolean) {
+    for (const control of this.interactiveControls) {
+      if (control.input) {
+        control.input.enabled = enabled;
+      }
+    }
   }
 }
