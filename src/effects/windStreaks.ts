@@ -46,7 +46,9 @@ export class WindStreaks {
       },
       emitZone: this.createEmitZone(bounds.width, bounds.height),
     });
-    this.emitter.setDepth(WIND_STREAK_DEPTH);
+    this.emitter
+      .setDepth(WIND_STREAK_DEPTH)
+      .setScrollFactor(0);
     this.sync(true);
   }
 

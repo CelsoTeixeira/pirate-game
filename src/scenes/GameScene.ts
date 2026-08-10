@@ -27,6 +27,13 @@ const GAME_SHIP_SCALES: Record<ShipBuild['size'], number> = {
   big: 0.12,
 };
 const GAME_SAIL_STATES: readonly ModularShipSailState[] = ['closed', 'partial', 'open'];
+const WORLD_BLOCK_SIZE = 512;
+const WORLD_BLOCK_COUNT = 3;
+const WORLD_SIZE = WORLD_BLOCK_SIZE * WORLD_BLOCK_COUNT;
+const PLAYER_START = WORLD_SIZE / 2;
+const ENEMY_OFFSET_X = 240;
+const ENEMY_OFFSET_Y = -70;
+const CAMERA_FOLLOW_LERP = 0.1;
 
 export class GameScene extends Phaser.Scene {
   private playerShip?: Ship;
@@ -67,18 +74,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#082f49');
+    this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    this.cameras.main
+      .setBackgroundColor('#082f49')
+      .setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
 
     this.add.text(16, 16, 'pirate-game', {
       color: '#e0f2fe',
       fontFamily: 'monospace',
       fontSize: '18px',
-    });
+    }).setScrollFactor(0);
     this.debugReadout = this.add.text(16, 40, '', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '12px',
-    });
+    }).setScrollFactor(0);
     this.windStreaks = new WindStreaks(this, this.wind);
     this.windCompass = new WindCompass(this);
 
@@ -87,14 +97,25 @@ export class GameScene extends Phaser.Scene {
       throw new Error('GameScene cannot create without a ship build.');
     }
 
-    this.playerShip = new Ship(this, 480, 270, 'pirate', this.createPlayerCannonDefinitions(this.build));
+    this.playerShip = new Ship(
+      this,
+      PLAYER_START,
+      PLAYER_START,
+      'pirate',
+      this.createPlayerCannonDefinitions(this.build),
+    );
     this.playerShip.sailState = this.toGameSailState(this.build.sailState);
     this.playerShip.setVisible(false);
     this.playerShipVisual = new ModularShip(this, this.playerShip.x, this.playerShip.y, this.build)
       .applyBuild(this.build)
       .setScale(GAME_SHIP_SCALES[this.build.size])
       .setBuildInteractionEnabled(false);
-    this.enemyShip = new Ship(this, 720, 200, 'white');
+    this.enemyShip = new Ship(
+      this,
+      PLAYER_START + ENEMY_OFFSET_X,
+      PLAYER_START + ENEMY_OFFSET_Y,
+      'white',
+    );
     this.enemyShip.anchored = true;
     this.damageableShips = [this.enemyShip];
     this.playerShip.on('cannonball-fired', this.handlePlayerCannonBallFired, this);
@@ -109,6 +130,12 @@ export class GameScene extends Phaser.Scene {
     this.windIncreaseKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.PLUS);
     this.input.on('pointerdown', this.handlePointerDown, this);
     this.syncPlayerShipVisual();
+    this.cameras.main.startFollow(
+      this.playerShip,
+      true,
+      CAMERA_FOLLOW_LERP,
+      CAMERA_FOLLOW_LERP,
+    );
   }
 
   update(_time: number, delta: number) {
