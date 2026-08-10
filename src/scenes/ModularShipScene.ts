@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ModularShip } from '../entities/ModularShip';
+import { ModularShip, type ModularShipSize } from '../entities/ModularShip';
 
 type CannonState = {
   placement: 'palette' | 'ship';
@@ -7,9 +7,18 @@ type CannonState = {
   homeY: number;
 };
 
+type SizeButton = {
+  background: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+};
+
 const SHIP_X = 400;
 const SHIP_Y = 300;
-const SHIP_SCALE = 1.05;
+const SHIP_DISPLAY_SCALES: Record<ModularShipSize, number> = {
+  small: 1.05,
+  medium: 0.48,
+  big: 0.39,
+};
 const PALETTE_X = 770;
 const PALETTE_Y = 230;
 const PALETTE_CANNON_SCALE = 0.16;
@@ -17,12 +26,21 @@ const REMOVE_ZONE_X = 770;
 const REMOVE_ZONE_Y = 390;
 const REMOVE_ZONE_WIDTH = 220;
 const REMOVE_ZONE_HEIGHT = 82;
+const SHIP_SIZE_Y = 99;
+const SHIP_SIZE_BUTTON_WIDTH = 74;
+const SHIP_SIZE_BUTTON_HEIGHT = 28;
+const SHIP_SIZE_OPTIONS: ReadonlyArray<{ size: ModularShipSize; label: string }> = [
+  { size: 'small', label: 'SMALL' },
+  { size: 'medium', label: 'MEDIUM' },
+  { size: 'big', label: 'BIG' },
+];
 
 export class ModularShipScene extends Phaser.Scene {
   private ship?: ModularShip;
   private removeZone?: Phaser.GameObjects.Zone;
   private cannonCountText?: Phaser.GameObjects.Text;
   private readonly cannonStates = new Map<Phaser.GameObjects.Image, CannonState>();
+  private readonly sizeButtons = new Map<ModularShipSize, SizeButton>();
 
   constructor() {
     super('ModularShipScene');
@@ -34,6 +52,7 @@ export class ModularShipScene extends Phaser.Scene {
 
   create() {
     this.cannonStates.clear();
+    this.sizeButtons.clear();
     this.cameras.main.setBackgroundColor('#082f49');
 
     this.add.text(24, 18, 'SHIP BUILDER', {
@@ -51,7 +70,9 @@ export class ModularShipScene extends Phaser.Scene {
     this.ship = new ModularShip(this, SHIP_X, SHIP_Y, {
       size: 'small',
       sailState: 'closed',
-    }).setScale(SHIP_SCALE);
+    }).setScale(SHIP_DISPLAY_SCALES.small);
+
+    this.createSizeControls();
 
     this.add.rectangle(770, 267, 260, 300, 0x0c4a6e, 0.55)
       .setStrokeStyle(1, 0x38bdf8, 0.45);
@@ -84,6 +105,50 @@ export class ModularShipScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.input.keyboard?.once('keydown-SPACE', () => this.scene.start('GameScene'));
+  }
+
+  private createSizeControls() {
+    this.add.text(PALETTE_X, 73, 'SHIP SIZE', {
+      color: '#bae6fd',
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    SHIP_SIZE_OPTIONS.forEach(({ size, label }, index) => {
+      const x = PALETTE_X + (index - 1) * 82;
+      const background = this.add.rectangle(
+        x,
+        SHIP_SIZE_Y,
+        SHIP_SIZE_BUTTON_WIDTH,
+        SHIP_SIZE_BUTTON_HEIGHT,
+      ).setInteractive({ useHandCursor: true });
+      const buttonLabel = this.add.text(x, SHIP_SIZE_Y, label, {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      background.on(Phaser.Input.Events.POINTER_DOWN, () => {
+        this.ship?.setShipSize(size).setScale(SHIP_DISPLAY_SCALES[size]);
+        this.refreshSizeControls();
+      });
+      this.sizeButtons.set(size, { background, label: buttonLabel });
+    });
+
+    this.refreshSizeControls();
+  }
+
+  private refreshSizeControls() {
+    const selectedSize = this.ship?.config.size;
+
+    for (const [size, { background, label }] of this.sizeButtons) {
+      const isSelected = size === selectedSize;
+      background
+        .setFillStyle(isSelected ? 0x0284c7 : 0x0c4a6e, isSelected ? 1 : 0.65)
+        .setStrokeStyle(1, isSelected ? 0xe0f2fe : 0x38bdf8, isSelected ? 1 : 0.45);
+      label.setColor(isSelected ? '#ffffff' : '#bae6fd');
+    }
   }
 
   private createPaletteCannon() {

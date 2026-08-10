@@ -62,7 +62,10 @@ export class ModularShip extends Phaser.GameObjects.Container {
   public readonly config: ModularShipConfig;
   public readonly cannonDropZone: Phaser.GameObjects.Zone;
 
-  private readonly layout: ShipLayout;
+  private layout: ShipLayout;
+  private readonly base: Phaser.GameObjects.Image;
+  private readonly poles: Phaser.GameObjects.Image;
+  private readonly sails: Phaser.GameObjects.Image;
 
   constructor(scene: Phaser.Scene, x: number, y: number, config: ModularShipConfig) {
     super(scene, x, y);
@@ -70,9 +73,13 @@ export class ModularShip extends Phaser.GameObjects.Container {
     this.config = { ...config };
     this.layout = SHIP_LAYOUTS[config.size];
 
-    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'base')));
-    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'poles')));
-    this.add(new Phaser.GameObjects.Image(scene, 0, 0, getSailsTextureKey(config.size, config.sailState)));
+    this.base = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'base'));
+    this.poles = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'poles'));
+    this.sails = new Phaser.GameObjects.Image(scene, 0, 0, getSailsTextureKey(config.size, config.sailState));
+
+    this.add(this.base);
+    this.add(this.poles);
+    this.add(this.sails);
 
     this.cannonDropZone = new Phaser.GameObjects.Zone(
       scene,
@@ -92,12 +99,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
 
     for (const size of SHIP_SIZES) {
       scene.load.image(getPartTextureKey(size, 'base'), `${SHIP_PARTS_PATH}/base/pirate_ship_${size}_base.png`);
-      scene.load.image(getPartTextureKey(size, 'poles'), `${SHIP_PARTS_PATH}/poles/pirate_ship_${size}_poles.png`);
+      scene.load.image(getPartTextureKey(size, 'poles'), `${SHIP_PARTS_PATH}/poles/wood/ship_${size}_poles.png`);
 
       for (const sailState of SAIL_STATES) {
         scene.load.image(
           getSailsTextureKey(size, sailState),
-          `${SHIP_PARTS_PATH}/sails/pirate_ship_${size}_sails_${sailState}.png`,
+          `${SHIP_PARTS_PATH}/sails/black/ship_${size}_sails_${sailState}.png`,
         );
       }
     }
@@ -106,6 +113,51 @@ export class ModularShip extends Phaser.GameObjects.Container {
   createCannon(x: number, y: number) {
     return new Phaser.GameObjects.Image(this.scene, x, y, MODULAR_SHIP_CANNON_TEXTURE_KEY)
       .setInteractive(CANNON_HIT_AREA, Phaser.Geom.Rectangle.Contains);
+  }
+
+  setShipSize(size: ModularShipSize): this {
+    if (size === this.config.size) {
+      return this;
+    }
+
+    const previousLayout = this.layout;
+    const mountedCannons = this.list
+      .filter(
+        (child): child is Phaser.GameObjects.Image =>
+          child instanceof Phaser.GameObjects.Image && child.texture.key === MODULAR_SHIP_CANNON_TEXTURE_KEY,
+      )
+      .map((cannon) => ({
+        cannon,
+        isLeftSide: cannon.x < 0,
+        progress: Phaser.Math.Clamp(
+          (cannon.y - previousLayout.minCannonY)
+            / (previousLayout.maxCannonY - previousLayout.minCannonY),
+          0,
+          1,
+        ),
+      }));
+
+    this.layout = SHIP_LAYOUTS[size];
+    this.config.size = size;
+    this.base.setTexture(getPartTextureKey(size, 'base'));
+    this.poles.setTexture(getPartTextureKey(size, 'poles'));
+    this.sails.setTexture(getSailsTextureKey(size, this.config.sailState));
+
+    this.cannonDropZone.setSize(this.layout.dropZoneWidth, this.layout.dropZoneHeight, false);
+    const dropZoneHitArea = this.cannonDropZone.input?.hitArea;
+    if (dropZoneHitArea instanceof Phaser.Geom.Rectangle) {
+      dropZoneHitArea.setSize(this.layout.dropZoneWidth, this.layout.dropZoneHeight);
+    }
+
+    for (const { cannon, isLeftSide, progress } of mountedCannons) {
+      cannon.setPosition(
+        isLeftSide ? -this.layout.cannonX : this.layout.cannonX,
+        Phaser.Math.Linear(this.layout.minCannonY, this.layout.maxCannonY, progress),
+      );
+      this.repositionCannon(cannon);
+    }
+
+    return this;
   }
 
   mountCannon(cannon: Phaser.GameObjects.Image, worldX: number, worldY: number) {
