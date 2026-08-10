@@ -19,6 +19,11 @@ type ShipLayout = {
   dropZoneHeight: number;
 };
 
+type PartPositionOffset = {
+  x: number;
+  y: number;
+};
+
 const SHIP_PARTS_PATH = 'assets/ship-parts';
 const MODULAR_SHIP_CANNON_TEXTURE_KEY = 'modular-ship-cannon';
 const SHIP_SIZES: readonly ModularShipSize[] = ['small', 'medium', 'big'];
@@ -30,6 +35,33 @@ export const MODULAR_SHIP_SAIL_TINTS: Record<ModularShipSailColor, number> = {
   crimson: 0xe11d48,
   ivory: 0xffffff,
   navy: 0x4c4b8c,
+};
+
+const SAIL_POSITION_OFFSETS: Record<
+  ModularShipSize,
+  Record<ModularShipSailState, PartPositionOffset>
+> = {
+  small: {
+    closed: { x: 0, y: -20 },
+    partial: { x: 1, y: 5 },
+    open: { x: -1, y: 33 },
+  },
+  medium: {
+    closed: { x: 0, y: 0 },
+    partial: { x: 1, y: -11 },
+    open: { x: 2, y: 18 },
+  },
+  big: {
+    closed: { x: 0, y: 0 },
+    partial: { x: 1, y: 36 },
+    open: { x: -2, y: 54 },
+  },
+};
+
+const POLE_POSITION_OFFSETS: Record<ModularShipSize, PartPositionOffset> = {
+  small: { x: 0, y: 41 },
+  medium: { x: 0, y: 0 },
+  big: { x: 0, y: 0 },
 };
 
 const SHIP_LAYOUTS: Record<ModularShipSize, ShipLayout> = {
@@ -84,8 +116,14 @@ export class ModularShip extends Phaser.GameObjects.Container {
 
     this.base = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'base'));
     this.poles = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'poles'));
-    this.sails = new Phaser.GameObjects.Image(scene, 0, 0, getSailsTextureKey(config.size, config.sailState))
-      .setTint(MODULAR_SHIP_SAIL_TINTS[config.sailColor]);
+    this.refreshPoles();
+    this.sails = new Phaser.GameObjects.Image(
+      scene,
+      0,
+      0,
+      getSailsTextureKey(config.size, config.sailState),
+    );
+    this.refreshSails();
 
     this.add(this.base);
     this.add(this.poles);
@@ -155,10 +193,8 @@ export class ModularShip extends Phaser.GameObjects.Container {
     this.layout = SHIP_LAYOUTS[size];
     this.config.size = size;
     this.base.setTexture(getPartTextureKey(size, 'base'));
-    this.poles.setTexture(getPartTextureKey(size, 'poles'));
-    this.sails
-      .setTexture(getSailsTextureKey(size, this.config.sailState))
-      .setTint(MODULAR_SHIP_SAIL_TINTS[this.config.sailColor]);
+    this.refreshPoles();
+    this.refreshSails();
 
     this.cannonDropZone.setSize(this.layout.dropZoneWidth, this.layout.dropZoneHeight, false);
     const dropZoneHitArea = this.cannonDropZone.input?.hitArea;
@@ -179,8 +215,33 @@ export class ModularShip extends Phaser.GameObjects.Container {
 
   setSailColor(color: ModularShipSailColor): this {
     this.config.sailColor = color;
-    this.sails.setTint(MODULAR_SHIP_SAIL_TINTS[color]);
+    this.refreshSails();
     return this;
+  }
+
+  setSailState(sailState: ModularShipSailState): this {
+    this.config.sailState = sailState;
+    this.refreshSails();
+    return this;
+  }
+
+  private refreshSails() {
+    const { size, sailState, sailColor } = this.config;
+    const offset = SAIL_POSITION_OFFSETS[size][sailState];
+
+    this.sails
+      .setTexture(getSailsTextureKey(size, sailState))
+      .setTint(MODULAR_SHIP_SAIL_TINTS[sailColor])
+      .setPosition(offset.x, offset.y);
+  }
+
+  private refreshPoles() {
+    const { size } = this.config;
+    const offset = POLE_POSITION_OFFSETS[size];
+
+    this.poles
+      .setTexture(getPartTextureKey(size, 'poles'))
+      .setPosition(offset.x, offset.y);
   }
 
   mountCannon(cannon: Phaser.GameObjects.Image, worldX: number, worldY: number) {

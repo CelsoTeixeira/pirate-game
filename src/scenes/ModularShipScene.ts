@@ -3,6 +3,7 @@ import {
   MODULAR_SHIP_SAIL_TINTS,
   ModularShip,
   type ModularShipSailColor,
+  type ModularShipSailState,
   type ModularShipSize,
 } from '../entities/ModularShip';
 import { CannonRangeOverlay } from '../ui/CannonRangeOverlay';
@@ -35,7 +36,7 @@ const SHIP_DISPLAY_SCALES: Record<ModularShipSize, number> = {
   big: 0.39,
 };
 const PALETTE_X = 770;
-const PALETTE_Y = 280;
+const PALETTE_Y = 320;
 const PALETTE_CANNON_SCALE = 0.16;
 const VIEW_MODE_Y = 43;
 const SHIP_SIZE_Y = 99;
@@ -44,6 +45,7 @@ const SHIP_SIZE_BUTTON_HEIGHT = 28;
 const SAIL_COLOR_Y = 157;
 const SAIL_COLOR_BUTTON_WIDTH = 58;
 const SAIL_COLOR_BUTTON_HEIGHT = 26;
+const SAIL_STATE_Y = 212;
 const RANGE_VIEW_ZOOM = 0.8;
 const RANGE_SHIP_SCREEN_X = 330;
 const RANGE_SHIP_SCREEN_Y = 270;
@@ -61,6 +63,11 @@ const SAIL_COLOR_OPTIONS: ReadonlyArray<{ color: ModularShipSailColor; label: st
   { color: 'crimson', label: 'RED' },
   { color: 'ivory', label: 'IVORY' },
   { color: 'navy', label: 'NAVY' },
+];
+const SAIL_STATE_OPTIONS: ReadonlyArray<{ state: ModularShipSailState; label: string }> = [
+  { state: 'closed', label: 'CLOSED' },
+  { state: 'partial', label: 'PARTIAL' },
+  { state: 'open', label: 'OPEN' },
 ];
 
 export class ModularShipScene extends Phaser.Scene {
@@ -82,6 +89,7 @@ export class ModularShipScene extends Phaser.Scene {
   private readonly viewModeButtons = new Map<BuilderViewMode, ControlButton>();
   private readonly sizeButtons = new Map<ModularShipSize, ControlButton>();
   private readonly sailColorButtons = new Map<ModularShipSailColor, ControlButton>();
+  private readonly sailStateButtons = new Map<ModularShipSailState, ControlButton>();
 
   constructor() {
     super('ModularShipScene');
@@ -97,6 +105,7 @@ export class ModularShipScene extends Phaser.Scene {
     this.viewModeButtons.clear();
     this.sizeButtons.clear();
     this.sailColorButtons.clear();
+    this.sailStateButtons.clear();
     this.editCameraState = undefined;
     this.viewMode = 'edit';
     this.viewModeInitialized = false;
@@ -138,26 +147,27 @@ export class ModularShipScene extends Phaser.Scene {
     this.cannonTransformGizmo.ignoreBy(this.uiCamera);
     this.cannonRangeOverlay.ignoreBy(this.uiCamera);
 
-    this.addToUi(this.add.rectangle(770, 270, 260, 320, 0x0c4a6e, 0.55)
+    this.addToUi(this.add.rectangle(770, 291, 260, 382, 0x0c4a6e, 0.55)
       .setStrokeStyle(1, 0x38bdf8, 0.45));
     this.createViewModeControls();
     this.createSizeControls();
     this.createSailColorControls();
+    this.createSailStateControls();
 
-    this.paletteHeadingText = this.addToUi(this.add.text(PALETTE_X, 200, '', {
+    this.paletteHeadingText = this.addToUi(this.add.text(PALETTE_X, 250, '', {
       color: '#e0f2fe',
       fontFamily: 'monospace',
       fontSize: '16px',
       fontStyle: 'bold',
     }).setOrigin(0.5));
-    this.paletteInstructionsText = this.addToUi(this.add.text(PALETTE_X, 225, '', {
+    this.paletteInstructionsText = this.addToUi(this.add.text(PALETTE_X, 272, '', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '11px',
     }).setOrigin(0.5));
 
     this.createPaletteCannon();
-    this.controlsInstructionsText = this.addToUi(this.add.text(PALETTE_X, 390, '', {
+    this.controlsInstructionsText = this.addToUi(this.add.text(PALETTE_X, 414, '', {
       align: 'center',
       color: '#bae6fd',
       fontFamily: 'monospace',
@@ -165,7 +175,7 @@ export class ModularShipScene extends Phaser.Scene {
       lineSpacing: 7,
     }).setOrigin(0.5));
 
-    this.cannonCountText = this.addToUi(this.add.text(PALETTE_X, 474, '', {
+    this.cannonCountText = this.addToUi(this.add.text(PALETTE_X, 486, '', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '12px',
@@ -351,6 +361,68 @@ export class ModularShipScene extends Phaser.Scene {
     }
   }
 
+  private createSailStateControls() {
+    this.addToUi(this.add.text(PALETTE_X, 185, 'SAIL STATE', {
+      color: '#bae6fd',
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    SAIL_STATE_OPTIONS.forEach(({ state, label }, index) => {
+      const x = PALETTE_X + (index - 1) * 82;
+      const background = this.addToUi(this.add.rectangle(
+        x,
+        SAIL_STATE_Y,
+        SHIP_SIZE_BUTTON_WIDTH,
+        SHIP_SIZE_BUTTON_HEIGHT,
+      ).setInteractive({ useHandCursor: true }));
+      const buttonLabel = this.addToUi(this.add.text(x, SAIL_STATE_Y, label, {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+      background.on(Phaser.Input.Events.POINTER_DOWN, (
+        _pointer: Phaser.Input.Pointer,
+        _localX: number,
+        _localY: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        event.stopPropagation();
+        if (this.viewMode !== 'edit') {
+          return;
+        }
+        this.ship?.setSailState(state);
+        this.refreshSailStateControls();
+      });
+      this.sailStateButtons.set(state, { background, label: buttonLabel });
+    });
+
+    this.refreshSailStateControls();
+  }
+
+  private refreshSailStateControls() {
+    const selectedState = this.ship?.config.sailState;
+    const isEnabled = this.viewMode === 'edit';
+
+    for (const [state, { background, label }] of this.sailStateButtons) {
+      const isSelected = state === selectedState;
+      if (!isEnabled) {
+        background
+          .setFillStyle(0x334155, 0.45)
+          .setStrokeStyle(1, 0x64748b, 0.35);
+        label.setColor('#64748b');
+        continue;
+      }
+
+      background
+        .setFillStyle(isSelected ? 0x0284c7 : 0x0c4a6e, isSelected ? 1 : 0.65)
+        .setStrokeStyle(1, isSelected ? 0xe0f2fe : 0x38bdf8, isSelected ? 1 : 0.45);
+      label.setColor(isSelected ? '#ffffff' : '#bae6fd');
+    }
+  }
+
   private createPaletteCannon() {
     if (!this.ship) {
       return;
@@ -518,7 +590,11 @@ export class ModularShipScene extends Phaser.Scene {
     if (this.ship?.cannonDropZone.input) {
       this.ship.cannonDropZone.input.enabled = isEditMode;
     }
-    for (const { background } of [...this.sizeButtons.values(), ...this.sailColorButtons.values()]) {
+    for (const { background } of [
+      ...this.sizeButtons.values(),
+      ...this.sailColorButtons.values(),
+      ...this.sailStateButtons.values(),
+    ]) {
       if (background.input) {
         background.input.enabled = isEditMode;
       }
@@ -526,6 +602,7 @@ export class ModularShipScene extends Phaser.Scene {
 
     this.refreshSizeControls();
     this.refreshSailColorControls();
+    this.refreshSailStateControls();
     this.refreshViewModeControls();
     this.refreshInstructions();
   }
