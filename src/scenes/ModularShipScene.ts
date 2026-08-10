@@ -22,6 +22,13 @@ type ControlButton = {
   label: Phaser.GameObjects.Text;
 };
 
+type RangeControlButton = {
+  background: Phaser.GameObjects.Image;
+  normalTexture: string;
+  activeTexture: string;
+  disabledTexture: string;
+};
+
 type CameraState = {
   scrollX: number;
   scrollY: number;
@@ -49,6 +56,10 @@ const SAIL_STATE_Y = 212;
 const RANGE_VIEW_ZOOM = 0.8;
 const RANGE_SHIP_SCREEN_X = 330;
 const RANGE_SHIP_SCREEN_Y = 270;
+const RANGE_MIN_ZOOM = 0.4;
+const RANGE_MAX_ZOOM = 1.6;
+const RANGE_ZOOM_STEP = 0.2;
+const RANGE_PAN_SCREEN_STEP = 80;
 const VIEW_MODE_OPTIONS: ReadonlyArray<{ mode: BuilderViewMode; label: string }> = [
   { mode: 'edit', label: 'EDIT' },
   { mode: 'range', label: 'RANGE' },
@@ -77,14 +88,25 @@ export class ModularShipScene extends Phaser.Scene {
   private paletteHeadingText?: Phaser.GameObjects.Text;
   private paletteInstructionsText?: Phaser.GameObjects.Text;
   private controlsInstructionsText?: Phaser.GameObjects.Text;
+  private rightPanelBackground?: Phaser.GameObjects.Rectangle;
   private selectedCannon?: Phaser.GameObjects.Image;
   private cannonTransformGizmo?: CannonTransformGizmo;
   private cannonRangeOverlay?: CannonRangeOverlay;
   private uiRoot?: Phaser.GameObjects.Container;
   private uiCamera?: Phaser.Cameras.Scene2D.Camera;
   private editCameraState?: CameraState;
+  private rangeCameraState?: CameraState;
+  private rangeCameraControls?: Phaser.GameObjects.Container;
+  private rangeZoomText?: Phaser.GameObjects.Text;
+  private rangeZoomInButton?: RangeControlButton;
+  private rangeZoomOutButton?: RangeControlButton;
   private viewMode: BuilderViewMode = 'edit';
   private viewModeInitialized = false;
+  private readonly rangeControlInputs: Phaser.GameObjects.GameObject[] = [];
+  private readonly rangeControlButtons: RangeControlButton[] = [];
+  private readonly editPanelObjects: Array<
+    Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible
+  > = [];
   private readonly cannonStates = new Map<Phaser.GameObjects.Image, CannonState>();
   private readonly viewModeButtons = new Map<BuilderViewMode, ControlButton>();
   private readonly sizeButtons = new Map<ModularShipSize, ControlButton>();
@@ -107,6 +129,10 @@ export class ModularShipScene extends Phaser.Scene {
     this.sailColorButtons.clear();
     this.sailStateButtons.clear();
     this.editCameraState = undefined;
+    this.rangeCameraState = undefined;
+    this.rangeControlInputs.length = 0;
+    this.rangeControlButtons.length = 0;
+    this.editPanelObjects.length = 0;
     this.viewMode = 'edit';
     this.viewModeInitialized = false;
     this.cameras.main.setBackgroundColor('#082f49').setZoom(1).setScroll(0, 0);
@@ -147,7 +173,7 @@ export class ModularShipScene extends Phaser.Scene {
     this.cannonTransformGizmo.ignoreBy(this.uiCamera);
     this.cannonRangeOverlay.ignoreBy(this.uiCamera);
 
-    this.addToUi(this.add.rectangle(770, 291, 260, 382, 0x0c4a6e, 0.55)
+    this.rightPanelBackground = this.addToUi(this.add.rectangle(770, 291, 260, 382, 0x0c4a6e, 0.55)
       .setStrokeStyle(1, 0x38bdf8, 0.45));
     this.createViewModeControls();
     this.createSizeControls();
@@ -174,6 +200,7 @@ export class ModularShipScene extends Phaser.Scene {
       fontSize: '11px',
       lineSpacing: 7,
     }).setOrigin(0.5));
+    this.createRangeCameraControls();
 
     this.cannonCountText = this.addToUi(this.add.text(PALETTE_X, 486, '', {
       color: '#bae6fd',
@@ -201,6 +228,13 @@ export class ModularShipScene extends Phaser.Scene {
     this.cameras.main.ignore(gameObject);
     this.uiRoot?.add(gameObject);
     return gameObject;
+  }
+
+  private addToEditPanel<
+    T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible,
+  >(gameObject: T): T {
+    this.editPanelObjects.push(gameObject);
+    return this.addToUi(gameObject);
   }
 
   private createViewModeControls() {
@@ -238,8 +272,122 @@ export class ModularShipScene extends Phaser.Scene {
     });
   }
 
+  private createRangeCameraControls() {
+    this.createRangeControlTextures();
+    const controls = this.add.container(0, 0).setVisible(false);
+    const children: Phaser.GameObjects.GameObject[] = [];
+
+    const createButton = (
+      x: number,
+      y: number,
+      icon: 'up' | 'left' | 'right' | 'down' | 'minus' | 'plus',
+      onClick: () => void,
+    ): RangeControlButton => {
+      const normalTexture = `range-control-${icon}`;
+      const activeTexture = `${normalTexture}-active`;
+      const disabledTexture = `${normalTexture}-disabled`;
+      const background = this.add.image(x, y, normalTexture)
+        .setInteractive({ useHandCursor: true });
+
+      background.on(Phaser.Input.Events.POINTER_OVER, () => {
+        if (background.input?.enabled) {
+          background.setTexture(activeTexture);
+        }
+      });
+      background.on(Phaser.Input.Events.POINTER_OUT, () => {
+        if (background.input?.enabled) {
+          background.setTexture(normalTexture);
+        }
+      });
+
+      background.on(Phaser.Input.Events.POINTER_DOWN, (
+        _pointer: Phaser.Input.Pointer,
+        _localX: number,
+        _localY: number,
+        event: Phaser.Types.Input.EventData,
+      ) => {
+        event.stopPropagation();
+        if (this.viewMode !== 'range') {
+          return;
+        }
+        onClick();
+      });
+      children.push(background);
+      this.rangeControlInputs.push(background);
+      const button = { background, normalTexture, activeTexture, disabledTexture };
+      this.rangeControlButtons.push(button);
+      return button;
+    };
+
+    const panCenterX = 38;
+    const panCenterY = 486;
+    const panStep = 19;
+    createButton(panCenterX, panCenterY - panStep, 'up', () => this.panRangeCamera(0, -1));
+    createButton(panCenterX - panStep, panCenterY, 'left', () => this.panRangeCamera(-1, 0));
+    createButton(panCenterX + panStep, panCenterY, 'right', () => this.panRangeCamera(1, 0));
+    createButton(panCenterX, panCenterY + panStep, 'down', () => this.panRangeCamera(0, 1));
+
+    this.rangeZoomOutButton = createButton(88, panCenterY, 'minus', () => this.zoomRangeCamera(-1));
+    this.rangeZoomText = this.add.text(116, panCenterY, '', {
+      color: '#f8fafc',
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    children.push(this.rangeZoomText);
+    this.rangeZoomInButton = createButton(144, panCenterY, 'plus', () => this.zoomRangeCamera(1));
+
+    controls.add(children);
+    this.rangeCameraControls = this.addToUi(controls);
+  }
+
+  private createRangeControlTextures() {
+    const icons: ReadonlyArray<'up' | 'left' | 'right' | 'down' | 'minus' | 'plus'> = [
+      'up', 'left', 'right', 'down', 'minus', 'plus',
+    ];
+    icons.forEach((icon) => {
+      this.createRangeControlTexture(`range-control-${icon}`, icon, 0xf8fafc, 0x1f2937);
+      this.createRangeControlTexture(`range-control-${icon}-active`, icon, 0xf43f5e, 0xffffff);
+      this.createRangeControlTexture(`range-control-${icon}-disabled`, icon, 0x94a3b8, 0x475569);
+    });
+  }
+
+  private createRangeControlTexture(
+    key: string,
+    icon: 'up' | 'left' | 'right' | 'down' | 'minus' | 'plus',
+    fillColor: number,
+    symbolColor: number,
+  ) {
+    if (this.textures.exists(key)) {
+      return;
+    }
+
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0x020617, 0.45).fillRoundedRect(1, 2, 20, 20, 4);
+    graphics.fillStyle(fillColor, 1).fillRoundedRect(1, 1, 20, 20, 4);
+    graphics.lineStyle(1, 0xffffff, 0.82).strokeRoundedRect(1.5, 1.5, 19, 19, 3.5);
+    graphics.fillStyle(symbolColor, 1);
+
+    if (icon === 'up') {
+      graphics.fillTriangle(11, 6, 6.5, 12, 15.5, 12).fillRect(9, 11, 4, 5);
+    } else if (icon === 'down') {
+      graphics.fillTriangle(6.5, 10, 15.5, 10, 11, 16).fillRect(9, 7, 4, 5);
+    } else if (icon === 'left') {
+      graphics.fillTriangle(6, 11, 12, 6.5, 12, 15.5).fillRect(11, 9, 5, 4);
+    } else if (icon === 'right') {
+      graphics.fillTriangle(16, 11, 10, 6.5, 10, 15.5).fillRect(6, 9, 5, 4);
+    } else if (icon === 'minus') {
+      graphics.fillRect(6, 9.5, 10, 3);
+    } else {
+      graphics.fillRect(6, 9.5, 10, 3).fillRect(9.5, 6, 3, 10);
+    }
+
+    graphics.generateTexture(key, 22, 23);
+    graphics.destroy();
+  }
+
   private createSizeControls() {
-    this.addToUi(this.add.text(PALETTE_X, 73, 'SHIP SIZE', {
+    this.addToEditPanel(this.add.text(PALETTE_X, 73, 'SHIP SIZE', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '11px',
@@ -248,13 +396,13 @@ export class ModularShipScene extends Phaser.Scene {
 
     SHIP_SIZE_OPTIONS.forEach(({ size, label }, index) => {
       const x = PALETTE_X + (index - 1) * 82;
-      const background = this.addToUi(this.add.rectangle(
+      const background = this.addToEditPanel(this.add.rectangle(
         x,
         SHIP_SIZE_Y,
         SHIP_SIZE_BUTTON_WIDTH,
         SHIP_SIZE_BUTTON_HEIGHT,
       ).setInteractive({ useHandCursor: true }));
-      const buttonLabel = this.addToUi(this.add.text(x, SHIP_SIZE_Y, label, {
+      const buttonLabel = this.addToEditPanel(this.add.text(x, SHIP_SIZE_Y, label, {
         fontFamily: 'monospace',
         fontSize: '11px',
         fontStyle: 'bold',
@@ -302,7 +450,7 @@ export class ModularShipScene extends Phaser.Scene {
   }
 
   private createSailColorControls() {
-    this.addToUi(this.add.text(PALETTE_X, 130, 'SAIL COLOR', {
+    this.addToEditPanel(this.add.text(PALETTE_X, 130, 'SAIL COLOR', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '11px',
@@ -311,14 +459,14 @@ export class ModularShipScene extends Phaser.Scene {
 
     SAIL_COLOR_OPTIONS.forEach(({ color, label }, index) => {
       const x = PALETTE_X + (index - 1.5) * 62;
-      const background = this.addToUi(this.add.rectangle(
+      const background = this.addToEditPanel(this.add.rectangle(
         x,
         SAIL_COLOR_Y,
         SAIL_COLOR_BUTTON_WIDTH,
         SAIL_COLOR_BUTTON_HEIGHT,
         MODULAR_SHIP_SAIL_TINTS[color],
       ).setInteractive({ useHandCursor: true }));
-      const buttonLabel = this.addToUi(this.add.text(x, SAIL_COLOR_Y, label, {
+      const buttonLabel = this.addToEditPanel(this.add.text(x, SAIL_COLOR_Y, label, {
         color: color === 'ivory' ? '#0f172a' : '#ffffff',
         fontFamily: 'monospace',
         fontSize: '10px',
@@ -362,7 +510,7 @@ export class ModularShipScene extends Phaser.Scene {
   }
 
   private createSailStateControls() {
-    this.addToUi(this.add.text(PALETTE_X, 185, 'SAIL STATE', {
+    this.addToEditPanel(this.add.text(PALETTE_X, 185, 'SAIL STATE', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '11px',
@@ -371,13 +519,13 @@ export class ModularShipScene extends Phaser.Scene {
 
     SAIL_STATE_OPTIONS.forEach(({ state, label }, index) => {
       const x = PALETTE_X + (index - 1) * 82;
-      const background = this.addToUi(this.add.rectangle(
+      const background = this.addToEditPanel(this.add.rectangle(
         x,
         SAIL_STATE_Y,
         SHIP_SIZE_BUTTON_WIDTH,
         SHIP_SIZE_BUTTON_HEIGHT,
       ).setInteractive({ useHandCursor: true }));
-      const buttonLabel = this.addToUi(this.add.text(x, SAIL_STATE_Y, label, {
+      const buttonLabel = this.addToEditPanel(this.add.text(x, SAIL_STATE_Y, label, {
         fontFamily: 'monospace',
         fontSize: '11px',
         fontStyle: 'bold',
@@ -541,10 +689,15 @@ export class ModularShipScene extends Phaser.Scene {
 
     const mainCamera = this.cameras.main;
     const isEditMode = mode === 'edit';
+    const previousMode = this.viewMode;
+    const wasInitialized = this.viewModeInitialized;
     this.viewMode = mode;
     this.viewModeInitialized = true;
 
     if (isEditMode) {
+      if (wasInitialized && previousMode === 'range') {
+        this.saveRangeCameraState();
+      }
       this.cannonRangeOverlay?.hide();
 
       if (this.editCameraState) {
@@ -577,15 +730,29 @@ export class ModularShipScene extends Phaser.Scene {
       if (this.ship) {
         this.cannonRangeOverlay?.show(this.ship, this.getMountedCannons());
       }
-      mainCamera
-        .setZoom(RANGE_VIEW_ZOOM)
-        .setScroll(
-          SHIP_X - RANGE_SHIP_SCREEN_X / RANGE_VIEW_ZOOM,
-          SHIP_Y - RANGE_SHIP_SCREEN_Y / RANGE_VIEW_ZOOM,
-        );
+      if (this.rangeCameraState) {
+        mainCamera
+          .setZoom(this.rangeCameraState.zoom)
+          .setScroll(this.rangeCameraState.scrollX, this.rangeCameraState.scrollY);
+      } else {
+        const halfWidth = mainCamera.width / 2;
+        const halfHeight = mainCamera.height / 2;
+        mainCamera
+          .setZoom(RANGE_VIEW_ZOOM)
+          .setScroll(
+            SHIP_X
+              - halfWidth
+              - (RANGE_SHIP_SCREEN_X - mainCamera.x - halfWidth) / RANGE_VIEW_ZOOM,
+            SHIP_Y
+              - halfHeight
+              - (RANGE_SHIP_SCREEN_Y - mainCamera.y - halfHeight) / RANGE_VIEW_ZOOM,
+          );
+      }
     }
 
     this.setPaletteEnabled(isEditMode);
+    this.setEditPanelVisible(isEditMode);
+    this.setRightPanelLayout(isEditMode);
     this.setMountedCannonsEnabled(isEditMode);
     if (this.ship?.cannonDropZone.input) {
       this.ship.cannonDropZone.input.enabled = isEditMode;
@@ -605,6 +772,108 @@ export class ModularShipScene extends Phaser.Scene {
     this.refreshSailStateControls();
     this.refreshViewModeControls();
     this.refreshInstructions();
+    this.refreshRangeCameraControls();
+  }
+
+  private setEditPanelVisible(visible: boolean) {
+    for (const gameObject of this.editPanelObjects) {
+      gameObject.setVisible(visible);
+    }
+  }
+
+  private setRightPanelLayout(isEditMode: boolean) {
+    this.rightPanelBackground
+      ?.setPosition(770, isEditMode ? 291 : 151)
+      .setSize(260, isEditMode ? 382 : 154);
+  }
+
+  private panRangeCamera(directionX: number, directionY: number) {
+    if (this.viewMode !== 'range') {
+      return;
+    }
+
+    const camera = this.cameras.main;
+    camera.setScroll(
+      camera.scrollX + directionX * RANGE_PAN_SCREEN_STEP / camera.zoom,
+      camera.scrollY + directionY * RANGE_PAN_SCREEN_STEP / camera.zoom,
+    );
+    this.saveRangeCameraState();
+  }
+
+  private zoomRangeCamera(direction: -1 | 1) {
+    if (this.viewMode !== 'range') {
+      return;
+    }
+
+    const camera = this.cameras.main;
+    const oldZoom = camera.zoom;
+    const nextZoom = Phaser.Math.Clamp(
+      Math.round((oldZoom + direction * RANGE_ZOOM_STEP) * 10) / 10,
+      RANGE_MIN_ZOOM,
+      RANGE_MAX_ZOOM,
+    );
+    if (nextZoom === oldZoom) {
+      return;
+    }
+
+    const focus = camera.getWorldPoint(RANGE_SHIP_SCREEN_X, RANGE_SHIP_SCREEN_Y);
+    const halfWidth = camera.width / 2;
+    const halfHeight = camera.height / 2;
+    camera
+      .setZoom(nextZoom)
+      .setScroll(
+        focus.x - halfWidth - (RANGE_SHIP_SCREEN_X - camera.x - halfWidth) / nextZoom,
+        focus.y - halfHeight - (RANGE_SHIP_SCREEN_Y - camera.y - halfHeight) / nextZoom,
+      );
+    this.saveRangeCameraState();
+    this.refreshRangeCameraControls();
+  }
+
+  private saveRangeCameraState() {
+    const camera = this.cameras.main;
+    this.rangeCameraState = {
+      scrollX: camera.scrollX,
+      scrollY: camera.scrollY,
+      zoom: camera.zoom,
+    };
+  }
+
+  private refreshRangeCameraControls() {
+    const isRangeMode = this.viewMode === 'range';
+    this.rangeCameraControls?.setVisible(isRangeMode);
+
+    for (const control of this.rangeControlInputs) {
+      if (control.input) {
+        control.input.enabled = isRangeMode;
+      }
+    }
+    for (const button of this.rangeControlButtons) {
+      button.background.setTexture(button.normalTexture);
+    }
+
+    const zoom = this.cameras.main.zoom;
+    this.rangeZoomText?.setText(`${Math.round(zoom * 100)}%`);
+    this.setRangeZoomButtonEnabled(
+      this.rangeZoomInButton,
+      isRangeMode && zoom < RANGE_MAX_ZOOM,
+    );
+    this.setRangeZoomButtonEnabled(
+      this.rangeZoomOutButton,
+      isRangeMode && zoom > RANGE_MIN_ZOOM,
+    );
+  }
+
+  private setRangeZoomButtonEnabled(button: RangeControlButton | undefined, enabled: boolean) {
+    if (!button) {
+      return;
+    }
+
+    if (button.background.input) {
+      button.background.input.enabled = enabled;
+    }
+    button.background
+      .setTexture(enabled ? button.normalTexture : button.disabledTexture)
+      .setAlpha(enabled ? 1 : 0.45);
   }
 
   private getMountedCannons() {
@@ -651,27 +920,32 @@ export class ModularShipScene extends Phaser.Scene {
         'Drag cannons onto the hull. Select a mounted cannon to adjust it.',
       );
       this.paletteHeadingText?.setText('CANNON');
-      this.paletteInstructionsText?.setText('drag a copy to the ship');
-      this.controlsInstructionsText?.setText([
-        'SELECT A MOUNTED CANNON',
-        'red handle: move X',
-        'green handle: move Y',
-        'yellow knob: rotate',
-        'red X: remove',
-      ]);
+      this.paletteHeadingText?.setY(250);
+      this.paletteInstructionsText?.setY(272).setText('drag a copy to the ship');
+      this.controlsInstructionsText
+        ?.setY(414)
+        .setText([
+          'SELECT A MOUNTED CANNON',
+          'red handle: move X',
+          'green handle: move Y',
+          'yellow knob: rotate',
+          'red X: remove',
+        ]);
+      this.cannonCountText?.setY(486);
       return;
     }
 
     this.builderInstructionsText?.setText(
       'Inspect each cannon firing cone. Switch to Edit to adjust the loadout.',
     );
-    this.paletteHeadingText?.setText('RANGE');
-    this.paletteInstructionsText?.setText('all mounted cannons');
-    this.controlsInstructionsText?.setText([
-      'CANNON RANGE VIEW',
-      'red cone: firing area',
-      'center line: aim direction',
-      'switch to EDIT to adjust',
-    ]);
+    this.paletteHeadingText?.setY(100).setText('RANGE VIEW');
+    this.paletteInstructionsText?.setY(122).setText('firing arcs for mounted cannons');
+    this.controlsInstructionsText
+      ?.setY(158)
+      .setText([
+        'red cone = firing area',
+        'center line = aim direction',
+      ]);
+    this.cannonCountText?.setY(205);
   }
 }
