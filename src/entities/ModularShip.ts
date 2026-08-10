@@ -10,6 +10,16 @@ export type ModularShipConfig = {
   sailColor: ModularShipSailColor;
 };
 
+export type MountedCannonBuild = {
+  x: number;
+  y: number;
+  rotation: number;
+};
+
+export type ShipBuild = ModularShipConfig & {
+  cannons: MountedCannonBuild[];
+};
+
 type ShipLayout = {
   cannonX: number;
   cannonScale: number;
@@ -164,6 +174,49 @@ export class ModularShip extends Phaser.GameObjects.Container {
       .setInteractive(CANNON_HIT_AREA, Phaser.Geom.Rectangle.Contains);
   }
 
+  exportBuild(): ShipBuild {
+    return {
+      ...this.config,
+      cannons: this.getMountedCannons().map((cannon) => ({
+        x: cannon.x,
+        y: cannon.y,
+        rotation: cannon.rotation,
+      })),
+    };
+  }
+
+  applyBuild(build: ShipBuild): this {
+    this.setShipSize(build.size);
+    this.setSailColor(build.sailColor);
+    this.setSailState(build.sailState);
+
+    for (const cannon of this.getMountedCannons()) {
+      this.remove(cannon, true);
+    }
+
+    for (const cannonBuild of build.cannons) {
+      const cannon = this.createCannon(0, 0).setRotation(cannonBuild.rotation);
+      this.addAt(cannon, this.getIndex(this.poles));
+      this.moveCannon(cannon, cannonBuild.x, cannonBuild.y);
+    }
+
+    return this;
+  }
+
+  setBuildInteractionEnabled(enabled: boolean): this {
+    if (this.cannonDropZone.input) {
+      this.cannonDropZone.input.enabled = enabled;
+    }
+
+    for (const cannon of this.getMountedCannons()) {
+      if (cannon.input) {
+        cannon.input.enabled = enabled;
+      }
+    }
+
+    return this;
+  }
+
   setShipSize(size: ModularShipSize): this {
     if (size === this.config.size) {
       return this;
@@ -275,5 +328,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
     );
     cannon.setScale(this.layout.cannonScale);
     cannon.setFlipX(cannon.x < 0);
+  }
+
+  private getMountedCannons() {
+    return this.list.filter(
+      (child): child is Phaser.GameObjects.Image =>
+        child instanceof Phaser.GameObjects.Image && child.texture.key === MODULAR_SHIP_CANNON_TEXTURE_KEY,
+    );
   }
 }

@@ -215,7 +215,13 @@ export class ModularShipScene extends Phaser.Scene {
       fontSize: '12px',
     }).setOrigin(0.5));
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.start('GameScene'));
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      if (!this.ship) {
+        throw new Error('Cannot start GameScene without a ship build.');
+      }
+
+      this.scene.start('GameScene', { build: this.ship.exportBuild() });
+    });
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.viewMode === 'edit') {
         this.selectCannon(undefined);

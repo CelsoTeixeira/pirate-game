@@ -4,7 +4,7 @@ import { playShipExplosion } from '../effects/effects';
 import shipTypes from './ship-types.json';
 import { Wind } from '../world/Wind';
 
-type ShipCannonDefinition = {
+export type ShipCannonDefinition = {
   direction: number;
   halfAngle: number;
   range: number;
@@ -73,7 +73,13 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   private readonly localCannonArcs: LocalCannonArc[];
   private readonly cannonSideStates: CannonSideFiringState[];
 
-  constructor(scene: Phaser.Scene, x: number, y: number, type: ShipTypeKey) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    type: ShipTypeKey,
+    cannons = shipTypeDefinitions[type].cannons,
+  ) {
     const definition = shipTypeDefinitions[type];
 
     super(scene, x, y, definition.texture);
@@ -84,7 +90,7 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     this.speed = definition.stats.speed;
     this.turnSpeed = definition.stats.turnSpeed;
     this.sailing = definition.sailing;
-    this.localCannonArcs = definition.cannons.map((cannon) => ({
+    this.localCannonArcs = cannons.map((cannon) => ({
       centerAngle: Phaser.Math.DegToRad(cannon.direction),
       halfAngle: Phaser.Math.DegToRad(cannon.halfAngle),
       range: cannon.range,
