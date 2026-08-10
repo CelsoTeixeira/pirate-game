@@ -129,8 +129,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
       )
       .map((cannon) => ({
         cannon,
-        isLeftSide: cannon.x < 0,
-        progress: Phaser.Math.Clamp(
+        xProgress: Phaser.Math.Clamp(
+          (cannon.x + previousLayout.cannonX) / (previousLayout.cannonX * 2),
+          0,
+          1,
+        ),
+        yProgress: Phaser.Math.Clamp(
           (cannon.y - previousLayout.minCannonY)
             / (previousLayout.maxCannonY - previousLayout.minCannonY),
           0,
@@ -150,12 +154,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
       dropZoneHitArea.setSize(this.layout.dropZoneWidth, this.layout.dropZoneHeight);
     }
 
-    for (const { cannon, isLeftSide, progress } of mountedCannons) {
-      cannon.setPosition(
-        isLeftSide ? -this.layout.cannonX : this.layout.cannonX,
-        Phaser.Math.Linear(this.layout.minCannonY, this.layout.maxCannonY, progress),
+    for (const { cannon, xProgress, yProgress } of mountedCannons) {
+      this.moveCannon(
+        cannon,
+        Phaser.Math.Linear(-this.layout.cannonX, this.layout.cannonX, xProgress),
+        Phaser.Math.Linear(this.layout.minCannonY, this.layout.maxCannonY, yProgress),
       );
-      this.repositionCannon(cannon);
     }
 
     return this;
@@ -182,7 +186,14 @@ export class ModularShip extends Phaser.GameObjects.Container {
 
   repositionCannon(cannon: Phaser.GameObjects.Image) {
     cannon.x = cannon.x < 0 ? -this.layout.cannonX : this.layout.cannonX;
-    cannon.y = Phaser.Math.Clamp(cannon.y, this.layout.minCannonY, this.layout.maxCannonY);
+    this.moveCannon(cannon, cannon.x, cannon.y);
+  }
+
+  moveCannon(cannon: Phaser.GameObjects.Image, x: number, y: number) {
+    cannon.setPosition(
+      Phaser.Math.Clamp(x, -this.layout.cannonX, this.layout.cannonX),
+      Phaser.Math.Clamp(y, this.layout.minCannonY, this.layout.maxCannonY),
+    );
     cannon.setScale(this.layout.cannonScale);
     cannon.setFlipX(cannon.x < 0);
   }
