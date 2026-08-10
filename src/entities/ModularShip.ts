@@ -90,6 +90,7 @@ export class ModularShip extends Phaser.GameObjects.Container {
     );
     this.cannonDropZone.setRectangleDropZone(this.layout.dropZoneWidth, this.layout.dropZoneHeight);
     this.add(this.cannonDropZone);
+    this.sendToBack(this.cannonDropZone);
 
     scene.add.existing(this);
   }
@@ -163,9 +164,20 @@ export class ModularShip extends Phaser.GameObjects.Container {
   mountCannon(cannon: Phaser.GameObjects.Image, worldX: number, worldY: number) {
     const localPoint = this.pointToContainer({ x: worldX, y: worldY });
 
-    this.addAt(cannon, 1);
+    this.addAt(cannon, this.getIndex(this.poles));
     cannon.setPosition(localPoint.x, localPoint.y);
     this.repositionCannon(cannon);
+  }
+
+  bringCannonToFront(cannon: Phaser.GameObjects.Image) {
+    const cannonIndex = this.getIndex(cannon);
+    const polesIndex = this.getIndex(this.poles);
+
+    if (cannonIndex === -1) {
+      return;
+    }
+
+    this.moveTo(cannon, cannonIndex < polesIndex ? polesIndex - 1 : polesIndex);
   }
 
   repositionCannon(cannon: Phaser.GameObjects.Image) {
