@@ -5,6 +5,7 @@ import {
   type ModularShipSailColor,
   type ModularShipSailState,
   type ModularShipSize,
+  type ShipBuild,
 } from '../entities/ModularShip';
 import { CannonRangeOverlay } from '../ui/CannonRangeOverlay';
 import { CannonTransformGizmo } from '../ui/CannonTransformGizmo';
@@ -82,6 +83,7 @@ const SAIL_STATE_OPTIONS: ReadonlyArray<{ state: ModularShipSailState; label: st
 ];
 
 export class ModularShipScene extends Phaser.Scene {
+  private initialBuild?: ShipBuild;
   private ship?: ModularShip;
   private cannonCountText?: Phaser.GameObjects.Text;
   private builderInstructionsText?: Phaser.GameObjects.Text;
@@ -115,6 +117,10 @@ export class ModularShipScene extends Phaser.Scene {
 
   constructor() {
     super('ModularShipScene');
+  }
+
+  init(data: { build?: ShipBuild }) {
+    this.initialBuild = data.build;
   }
 
   preload() {
@@ -159,11 +165,17 @@ export class ModularShipScene extends Phaser.Scene {
       fontSize: '13px',
     }));
 
-    this.ship = new ModularShip(this, SHIP_X, SHIP_Y, {
-      size: 'small',
-      sailState: 'closed',
-      sailColor: 'ivory',
-    }).setScale(SHIP_DISPLAY_SCALES.small);
+    const initialConfig = this.initialBuild ?? {
+      size: 'small' as const,
+      sailState: 'closed' as const,
+      sailColor: 'ivory' as const,
+    };
+    this.ship = new ModularShip(this, SHIP_X, SHIP_Y, initialConfig)
+      .setScale(SHIP_DISPLAY_SCALES[initialConfig.size]);
+    if (this.initialBuild) {
+      this.ship.applyBuild(this.initialBuild);
+      this.restoreMountedCannonBookkeeping();
+    }
     this.cannonTransformGizmo = new CannonTransformGizmo(
       this,
       (cannon) => this.removeCannon(cannon),
@@ -228,7 +240,10 @@ export class ModularShipScene extends Phaser.Scene {
       this.scene.start('GameScene', { build: this.ship.exportBuild() });
     });
     this.input.keyboard?.once('keydown-H', () => {
-      this.scene.start('WorldGenerationScene');
+      if (!this.ship) {
+        throw new Error('Cannot open world generation without a ship build.');
+      }
+      this.scene.start('WorldGenerationScene', { build: this.ship.exportBuild() });
     });
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.viewMode === 'edit') {
@@ -242,6 +257,20 @@ export class ModularShipScene extends Phaser.Scene {
     this.cameras.main.ignore(gameObject);
     this.uiRoot?.add(gameObject);
     return gameObject;
+  }
+
+  private restoreMountedCannonBookkeeping() {
+    if (!this.ship) return;
+
+    for (const child of this.ship.list) {
+      if (!(child instanceof Phaser.GameObjects.Image) || !child.input) continue;
+      this.configureDraggableCannon(child, {
+        placement: 'ship',
+        homeX: child.x,
+        homeY: child.y,
+      });
+      this.input.setDraggable(child, false);
+    }
   }
 
   private addToEditPanel<

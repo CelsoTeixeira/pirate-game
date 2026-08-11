@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
 import { ModularShipScene } from './scenes/ModularShipScene';
 import { WorldGenerationScene } from './scenes/WorldGenerationScene';
+import { ArchipelagoScene } from './scenes/ArchipelagoScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -20,7 +21,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [ModularShipScene, WorldGenerationScene, GameScene],
+  scene: [ModularShipScene, WorldGenerationScene, ArchipelagoScene, GameScene],
 };
 
 const game = new Phaser.Game(config);

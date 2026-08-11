@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import type { ShipBuild } from '../entities/ModularShip';
 import {
-  DEFAULT_HEIGHT_MAP_CONFIG,
-  generateHeightMap,
-  type HeightMap,
-} from '../world/generation/heightMap';
+  DEFAULT_ARCHIPELAGO_CONFIG,
+  generateArchipelago,
+  type GeneratedArchipelago,
+} from '../world/generation/archipelago';
 
 const TERRAIN_ATLAS_KEY = 'terrain-atlas-64';
 const TERRAIN_ATLAS_PATH = 'assets/terrain/terrain-atlas-64.png';
@@ -16,10 +17,6 @@ const LEFT_PANEL_X = 24;
 const RIGHT_PANEL_X = 536;
 const PANEL_Y = 82;
 const INITIAL_SEED = 0x51a7d;
-const INITIAL_SEA_LEVEL = 0.38;
-const MINIMUM_SEA_LEVEL = 0.2;
-const MAXIMUM_SEA_LEVEL = 0.7;
-const SEA_LEVEL_STEP = 0.02;
 
 type RgbColor = Readonly<{
   red: number;
@@ -43,15 +40,14 @@ const FALLBACK_TERRAIN_PALETTE: TerrainPalette = new Map([
 type GenerationKeys = Readonly<{
   randomize: Phaser.Input.Keyboard.Key;
   regenerate: Phaser.Input.Keyboard.Key;
-  raiseSeaLevel: Phaser.Input.Keyboard.Key;
-  lowerSeaLevel: Phaser.Input.Keyboard.Key;
+  launchWorld: Phaser.Input.Keyboard.Key;
   returnToBuilder: Phaser.Input.Keyboard.Key;
 }>;
 
 export class WorldGenerationScene extends Phaser.Scene {
   private seed = INITIAL_SEED;
-  private seaLevel = INITIAL_SEA_LEVEL;
-  private heightMap?: HeightMap;
+  private build?: ShipBuild;
+  private heightMap?: GeneratedArchipelago;
   private heightMapTexture?: Phaser.Textures.CanvasTexture;
   private terrainTexture?: Phaser.Textures.CanvasTexture;
   private heightMapPreview?: Phaser.GameObjects.Image;
@@ -62,6 +58,11 @@ export class WorldGenerationScene extends Phaser.Scene {
 
   constructor() {
     super('WorldGenerationScene');
+  }
+
+  init(data: { seed?: number; build?: ShipBuild }) {
+    this.build = data.build;
+    if (data.seed !== undefined) this.seed = data.seed >>> 0;
   }
 
   preload() {
@@ -129,14 +130,14 @@ export class WorldGenerationScene extends Phaser.Scene {
     this.add.text(
       480,
       512,
-      '[R] new seed   [SPACE] regenerate same seed   [UP/DOWN] sea level +/- 0.02',
+      '[R] new seed   [SPACE] regenerate',
       {
         color: '#bae6fd',
         fontFamily: 'monospace',
         fontSize: '11px',
       },
     ).setOrigin(0.5);
-    this.add.text(480, 529, '[ESC] return to ship builder', {
+    this.add.text(480, 529, '[ENTER] navigate this world   [ESC] return to ship builder', {
       color: '#7dd3fc',
       fontFamily: 'monospace',
       fontSize: '11px',
@@ -147,8 +148,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       this.keys = {
         randomize: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R),
         regenerate: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
-        raiseSeaLevel: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
-        lowerSeaLevel: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
+        launchWorld: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
         returnToBuilder: keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
       };
     }
@@ -170,37 +170,18 @@ export class WorldGenerationScene extends Phaser.Scene {
       this.regenerateHeightMap();
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.keys.raiseSeaLevel)) {
-      this.adjustSeaLevel(SEA_LEVEL_STEP);
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.keys.lowerSeaLevel)) {
-      this.adjustSeaLevel(-SEA_LEVEL_STEP);
+    if (Phaser.Input.Keyboard.JustDown(this.keys.launchWorld) && this.build) {
+      this.scene.start('ArchipelagoScene', { seed: this.seed, build: this.build });
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.returnToBuilder)) {
-      this.scene.start('ModularShipScene');
+      this.scene.start('ModularShipScene', { build: this.build });
     }
   }
 
   private regenerateHeightMap() {
-    this.heightMap = generateHeightMap(this.seed, DEFAULT_HEIGHT_MAP_CONFIG);
+    this.heightMap = generateArchipelago(this.seed, DEFAULT_ARCHIPELAGO_CONFIG);
     this.renderPanels();
-  }
-
-  private adjustSeaLevel(amount: number) {
-    const nextSeaLevel = Phaser.Math.Clamp(
-      Math.round((this.seaLevel + amount) * 100) / 100,
-      MINIMUM_SEA_LEVEL,
-      MAXIMUM_SEA_LEVEL,
-    );
-    if (nextSeaLevel === this.seaLevel) {
-      return;
-    }
-
-    this.seaLevel = nextSeaLevel;
-    this.renderTerrainPanel();
-    this.refreshStatus();
   }
 
   private renderPanels() {
@@ -218,7 +199,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       this.heightMap.width,
       this.heightMap.height,
     );
-    this.heightMap.values.forEach((elevation, index) => {
+    this.heightMap.elevations.forEach((elevation, index) => {
       const channel = Math.round(elevation * 255);
       const offset = index * 4;
       imageData.data[offset] = channel;
@@ -239,8 +220,11 @@ export class WorldGenerationScene extends Phaser.Scene {
       this.heightMap.width,
       this.heightMap.height,
     );
-    this.heightMap.values.forEach((elevation, index) => {
-      const color = this.terrainPalette.get(getTerrainFrame(elevation, this.seaLevel));
+    this.heightMap.elevations.forEach((elevation, index) => {
+      const color = this.terrainPalette.get(getTerrainFrame(
+        elevation,
+        this.heightMap?.landMask[index] === true,
+      ));
       if (!color) {
         throw new Error('Terrain overview palette is missing a classification color.');
       }
@@ -257,16 +241,16 @@ export class WorldGenerationScene extends Phaser.Scene {
 
   private refreshStatus() {
     this.statusText?.setText(
-      `seed ${this.seed}  |  sea level threshold ${this.seaLevel.toFixed(2)}  |  ${
-        DEFAULT_HEIGHT_MAP_CONFIG.width
-      }x${DEFAULT_HEIGHT_MAP_CONFIG.height}`,
+      `seed ${this.seed}  |  400 separate islands  |  ${
+        DEFAULT_ARCHIPELAGO_CONFIG.width
+      }x${DEFAULT_ARCHIPELAGO_CONFIG.height}`,
     );
   }
 
   private createPreviewTextures() {
     this.destroyPreviewTextures();
 
-    const { width, height } = DEFAULT_HEIGHT_MAP_CONFIG;
+    const { width, height } = DEFAULT_ARCHIPELAGO_CONFIG;
     const heightMapTexture = this.textures.createCanvas(HEIGHT_MAP_TEXTURE_KEY, width, height);
     const terrainTexture = this.textures.createCanvas(TERRAIN_TEXTURE_KEY, width, height);
     if (!heightMapTexture || !terrainTexture) {
@@ -368,19 +352,10 @@ export class WorldGenerationScene extends Phaser.Scene {
   }
 }
 
-function getTerrainFrame(elevation: number, seaLevel: number): TerrainFrame {
-  if (elevation < seaLevel - 0.12) {
-    return 0;
-  }
-  if (elevation < seaLevel) {
-    return 1;
-  }
-  if (elevation < seaLevel + 0.08) {
-    return 4;
-  }
-  if (elevation < seaLevel + 0.36) {
-    return 7;
-  }
+function getTerrainFrame(elevation: number, isLand: boolean): TerrainFrame {
+  if (!isLand) return elevation < 0.26 ? 0 : 1;
+  if (elevation < 0.48) return 4;
+  if (elevation < 0.72) return 7;
   return 11;
 }
 

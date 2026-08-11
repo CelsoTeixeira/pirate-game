@@ -1,16 +1,18 @@
-export type HeightMapGenerationConfig = Readonly<{
+export type ArchipelagoGenerationConfig = Readonly<{
   width: number;
   height: number;
 }>;
 
-export type HeightMap = Readonly<{
+export type GeneratedArchipelago = Readonly<{
   seed: number;
   width: number;
   height: number;
-  values: ReadonlyArray<number>;
+  elevations: ReadonlyArray<number>;
+  landMask: ReadonlyArray<boolean>;
+  islandIds: ReadonlyArray<number>;
 }>;
 
-export const DEFAULT_HEIGHT_MAP_CONFIG: HeightMapGenerationConfig = Object.freeze({
+export const DEFAULT_ARCHIPELAGO_CONFIG: ArchipelagoGenerationConfig = Object.freeze({
   width: 256,
   height: 256,
 });
@@ -38,16 +40,16 @@ type IslandPlan = Readonly<{
  * Each land footprint is grown from a seed cell and kept one water cell away
  * from every other footprint. Terrain classification remains a presentation concern.
  */
-export function generateHeightMap(
+export function generateArchipelago(
   seed: number,
-  config: HeightMapGenerationConfig,
-): HeightMap {
+  config: ArchipelagoGenerationConfig,
+): GeneratedArchipelago {
   validateConfig(config);
 
   const normalizedSeed = seed >>> 0;
   const random = createSeededRandom(normalizedSeed);
   const islandIds = placeIslands(config.width, config.height, createIslandPlans(random), random);
-  const values = createElevationValues(
+  const elevations = createElevationValues(
     config.width,
     config.height,
     islandIds,
@@ -58,16 +60,18 @@ export function generateHeightMap(
     seed: normalizedSeed,
     width: config.width,
     height: config.height,
-    values: Object.freeze(values),
+    elevations: Object.freeze(elevations),
+    landMask: Object.freeze(Array.from(islandIds, (islandId) => islandId !== 0)),
+    islandIds: Object.freeze(Array.from(islandIds)),
   });
 }
 
-function validateConfig(config: HeightMapGenerationConfig) {
+function validateConfig(config: ArchipelagoGenerationConfig) {
   if (!Number.isInteger(config.width) || config.width < 2) {
-    throw new Error('Height map width must be an integer greater than one.');
+    throw new Error('Archipelago width must be an integer greater than one.');
   }
   if (!Number.isInteger(config.height) || config.height < 2) {
-    throw new Error('Height map height must be an integer greater than one.');
+    throw new Error('Archipelago height must be an integer greater than one.');
   }
 }
 
