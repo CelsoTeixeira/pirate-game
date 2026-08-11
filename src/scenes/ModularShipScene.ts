@@ -209,11 +209,16 @@ export class ModularShipScene extends Phaser.Scene {
     }).setOrigin(0.5));
     this.updateCannonCount();
 
-    this.addToUi(this.add.text(480, 516, '[SPACE] continue to the current game scene', {
+    this.addToUi(this.add.text(
+      480,
+      516,
+      '[SPACE] current game scene   [H] world generation lab',
+      {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '12px',
-    }).setOrigin(0.5));
+      },
+    ).setOrigin(0.5));
 
     this.input.keyboard?.once('keydown-SPACE', () => {
       if (!this.ship) {
@@ -221,6 +226,9 @@ export class ModularShipScene extends Phaser.Scene {
       }
 
       this.scene.start('GameScene', { build: this.ship.exportBuild() });
+    });
+    this.input.keyboard?.once('keydown-H', () => {
+      this.scene.start('WorldGenerationScene');
     });
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.viewMode === 'edit') {

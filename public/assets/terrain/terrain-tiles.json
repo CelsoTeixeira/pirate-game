@@ -1,0 +1,27 @@
+{
+  "tileSize": 64,
+  "columns": 4,
+  "rows": 4,
+  "indexOrder": "row-major, left-to-right, top-to-bottom",
+  "sourceAtlas": "terrain-concept-atlas.png",
+  "atlas": "terrain-atlas-64.png",
+  "note": "First-pass visual roles only; no autotile, seamlessness, or transition guarantees.",
+  "tiles": [
+    { "index": 0, "filename": "tiles/00-deep-water.png", "role": "deep water" },
+    { "index": 1, "filename": "tiles/01-shallow-water.png", "role": "shallow water" },
+    { "index": 2, "filename": "tiles/02-shallow-water-sand-shore.png", "role": "shallow water to sand shore" },
+    { "index": 3, "filename": "tiles/03-water-sand-shore.png", "role": "water to sand shore" },
+    { "index": 4, "filename": "tiles/04-sand.png", "role": "sand" },
+    { "index": 5, "filename": "tiles/05-sand-grass-edge.png", "role": "sand to grass edge" },
+    { "index": 6, "filename": "tiles/06-sand-grass-edge.png", "role": "sand to grass edge" },
+    { "index": 7, "filename": "tiles/07-grass.png", "role": "grass" },
+    { "index": 8, "filename": "tiles/08-grass-rock-edge.png", "role": "grass to rock edge" },
+    { "index": 9, "filename": "tiles/09-mixed-grass-rock.png", "role": "mixed grass and rock" },
+    { "index": 10, "filename": "tiles/10-grass-rock-edge.png", "role": "grass to rock edge" },
+    { "index": 11, "filename": "tiles/11-rock.png", "role": "rock" },
+    { "index": 12, "filename": "tiles/12-deep-water-rock-shore.png", "role": "deep water to rock shore" },
+    { "index": 13, "filename": "tiles/13-shallow-water-rock-shore.png", "role": "shallow water to rock shore" },
+    { "index": 14, "filename": "tiles/14-water-sand-rock-shore.png", "role": "shallow water to sand and rock shore" },
+    { "index": 15, "filename": "tiles/15-sand-rock-edge.png", "role": "sand to rock edge" }
+  ]
+}
