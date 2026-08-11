@@ -175,12 +175,12 @@
 }
 
 .minimap-expanded {
-  position: absolute;
+  position: fixed;
   z-index: 30;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: clamp(8px, 2.5cqi, 28px);
+  padding: clamp(6px, 1.2cqi, 14px);
   background: rgb(1 11 17 / 78%);
   pointer-events: auto;
 }
@@ -190,9 +190,9 @@
   display: flex;
   flex-direction: column;
   width: min(100%, 1080px);
-  height: min(100%, 720px);
+  height: min(100%, 800px);
   min-height: 0;
-  padding: clamp(10px, 2cqi, 22px);
+  padding: clamp(8px, 1.2cqi, 14px);
   color: #fff7d6;
   background: linear-gradient(180deg, rgb(18 42 49 / 98%), rgb(7 24 31 / 99%));
   border: clamp(1px, 0.22cqi, 2px) solid #936c3c;
@@ -273,7 +273,8 @@
 .minimap-expanded__viewport {
   position: relative;
   align-self: center;
-  width: min(100%, 70cqb);
+  flex: 0 0 auto;
+  width: min(100%, 86cqb);
   aspect-ratio: 1;
   margin: auto 0;
   overflow: hidden;
