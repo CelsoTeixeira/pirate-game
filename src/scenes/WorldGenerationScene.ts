@@ -5,6 +5,10 @@ import {
   generateArchipelago,
   type GeneratedArchipelago,
 } from '../world/generation/archipelago';
+import type {
+  GeneratedPointOfInterest,
+  PoiSize,
+} from '../world/generation/pointsOfInterest';
 
 const TERRAIN_ATLAS_KEY = 'terrain-atlas-64';
 const TERRAIN_ATLAS_PATH = 'assets/terrain/terrain-atlas-64.png';
@@ -17,6 +21,51 @@ const LEFT_PANEL_X = 24;
 const RIGHT_PANEL_X = 536;
 const PANEL_Y = 82;
 const INITIAL_SEED = 0x51a7d;
+
+type LandPointOfInterest = Extract<GeneratedPointOfInterest, { environment: 'land' }>;
+type WaterPointOfInterest = Extract<GeneratedPointOfInterest, { environment: 'water' }>;
+type PointOfInterestKind = GeneratedPointOfInterest['kind'];
+
+const POI_MARKER_SIZES: Readonly<Record<PoiSize, number>> = {
+  small: 3,
+  medium: 5,
+  big: 7,
+};
+
+const POI_KIND_COLORS: Readonly<Record<PointOfInterestKind, number>> = {
+  city: 0x22d3ee,
+  'trading-post': 0xfbbf24,
+  fortress: 0xe2e8f0,
+  'pirate-hub': 0xfb7185,
+  'merchant-ship': 0x4ade80,
+  'navy-patrol': 0x60a5fa,
+  'pirate-ship': 0xfb923c,
+  kraken: 0xc084fc,
+  'ghost-ship': 0xa5f3fc,
+  'siren-waters': 0xf472b6,
+};
+
+const LAND_POI_LEGEND: ReadonlyArray<Readonly<{
+  kind: LandPointOfInterest['kind'];
+  label: string;
+}>> = [
+  { kind: 'city', label: 'city' },
+  { kind: 'trading-post', label: 'trading post' },
+  { kind: 'fortress', label: 'fortress' },
+  { kind: 'pirate-hub', label: 'pirate hub' },
+];
+
+const WATER_POI_LEGEND: ReadonlyArray<Readonly<{
+  kind: WaterPointOfInterest['kind'];
+  label: string;
+}>> = [
+  { kind: 'merchant-ship', label: 'merchant ship' },
+  { kind: 'navy-patrol', label: 'navy patrol' },
+  { kind: 'pirate-ship', label: 'pirate ship' },
+  { kind: 'kraken', label: 'kraken' },
+  { kind: 'ghost-ship', label: 'ghost ship' },
+  { kind: 'siren-waters', label: 'siren waters' },
+];
 
 type RgbColor = Readonly<{
   red: number;
@@ -95,7 +144,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       fontSize: '13px',
       fontStyle: 'bold',
     }).setOrigin(0.5);
-    this.add.text(RIGHT_PANEL_X + PANEL_SIZE / 2, 67, 'TERRAIN CLASSIFICATION', {
+    this.add.text(RIGHT_PANEL_X + PANEL_SIZE / 2, 67, 'TERRAIN + POINTS OF INTEREST', {
       color: '#e0f2fe',
       fontFamily: 'monospace',
       fontSize: '13px',
@@ -122,26 +171,17 @@ export class WorldGenerationScene extends Phaser.Scene {
     this.createPreviewTextures();
     this.terrainPalette = this.createTerrainPalette();
 
-    this.add.text(736, 493, 'deep water / shallow water / sand / grass / rock', {
-      color: '#bae6fd',
-      fontFamily: 'monospace',
-      fontSize: '11px',
-    }).setOrigin(0.5);
+    this.createPointOfInterestLegend();
     this.add.text(
       480,
-      512,
-      '[R] new seed   [SPACE] regenerate',
+      531,
+      '[R] new seed   [SPACE] regenerate   [ENTER] navigate world   [ESC] ship builder',
       {
-        color: '#bae6fd',
+        color: '#7dd3fc',
         fontFamily: 'monospace',
         fontSize: '11px',
       },
     ).setOrigin(0.5);
-    this.add.text(480, 529, '[ENTER] navigate this world   [ESC] return to ship builder', {
-      color: '#7dd3fc',
-      fontFamily: 'monospace',
-      fontSize: '11px',
-    }).setOrigin(0.5);
 
     const keyboard = this.input.keyboard;
     if (keyboard) {
@@ -236,15 +276,115 @@ export class WorldGenerationScene extends Phaser.Scene {
       imageData.data[offset + 3] = 255;
     });
     this.terrainTexture.context.putImageData(imageData, 0, 0);
+    this.drawPointOfInterestMarkers(
+      this.terrainTexture.context,
+      this.heightMap.pointsOfInterest,
+    );
     this.terrainTexture.refresh();
   }
 
   private refreshStatus() {
+    const landPointCount = this.heightMap?.pointsOfInterest
+      .filter((point) => point.environment === 'land')
+      .length ?? 0;
+    const waterPointCount = this.heightMap?.pointsOfInterest.length
+      ? this.heightMap.pointsOfInterest.length - landPointCount
+      : 0;
     this.statusText?.setText(
-      `seed ${this.seed}  |  400 separate islands  |  ${
+      `seed ${this.seed}  |  400 islands  |  ${landPointCount} land POIs  |  ${
+        waterPointCount
+      } water encounters  |  ${
         DEFAULT_ARCHIPELAGO_CONFIG.width
       }x${DEFAULT_ARCHIPELAGO_CONFIG.height}`,
     );
+  }
+
+  private drawPointOfInterestMarkers(
+    context: CanvasRenderingContext2D,
+    pointsOfInterest: ReadonlyArray<GeneratedPointOfInterest>,
+  ) {
+    context.save();
+    context.lineWidth = 1;
+    context.strokeStyle = '#020617';
+
+    pointsOfInterest.forEach((point) => {
+      const markerSize = POI_MARKER_SIZES[point.size];
+      const markerRadius = markerSize / 2;
+      const color = POI_KIND_COLORS[point.kind];
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+
+      if (point.environment === 'land') {
+        const markerOffset = Math.floor(markerSize / 2);
+        context.fillRect(
+          point.x - markerOffset,
+          point.y - markerOffset,
+          markerSize,
+          markerSize,
+        );
+        context.strokeRect(
+          point.x - markerOffset + 0.5,
+          point.y - markerOffset + 0.5,
+          markerSize - 1,
+          markerSize - 1,
+        );
+        return;
+      }
+
+      context.beginPath();
+      context.arc(point.x + 0.5, point.y + 0.5, markerRadius, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+    });
+
+    context.restore();
+  }
+
+  private createPointOfInterestLegend() {
+    this.add.text(736, 487, 'deep / shallow / sand / grass / rock', {
+      color: '#bae6fd',
+      fontFamily: 'monospace',
+      fontSize: '8px',
+    }).setOrigin(0.5);
+
+    this.add.text(24, 499, 'LAND square  size S/M/B = 3/5/7 map px', {
+      color: '#bae6fd',
+      fontFamily: 'monospace',
+      fontSize: '9px',
+    }).setOrigin(0, 0.5);
+    this.addPointOfInterestLegendItems(270, 499, LAND_POI_LEGEND, 'land');
+
+    this.add.text(24, 514, 'WATER circle', {
+      color: '#bae6fd',
+      fontFamily: 'monospace',
+      fontSize: '9px',
+    }).setOrigin(0, 0.5);
+    this.addPointOfInterestLegendItems(108, 514, WATER_POI_LEGEND, 'water');
+  }
+
+  private addPointOfInterestLegendItems(
+    startX: number,
+    y: number,
+    items: ReadonlyArray<Readonly<{ kind: PointOfInterestKind; label: string }>>,
+    environment: GeneratedPointOfInterest['environment'],
+  ) {
+    let x = startX;
+
+    items.forEach(({ kind, label }) => {
+      if (environment === 'land') {
+        this.add.rectangle(x + 4, y, 8, 8, POI_KIND_COLORS[kind])
+          .setStrokeStyle(1, 0x020617);
+      } else {
+        this.add.circle(x + 4, y, 4, POI_KIND_COLORS[kind])
+          .setStrokeStyle(1, 0x020617);
+      }
+
+      this.add.text(x + 11, y, label, {
+        color: '#e0f2fe',
+        fontFamily: 'monospace',
+        fontSize: '9px',
+      }).setOrigin(0, 0.5);
+      x += 23 + label.length * 6;
+    });
   }
 
   private createPreviewTextures() {

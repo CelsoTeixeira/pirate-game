@@ -1,3 +1,8 @@
+import {
+  generatePointsOfInterest,
+  type GeneratedPointOfInterest,
+} from './pointsOfInterest';
+
 export type ArchipelagoGenerationConfig = Readonly<{
   width: number;
   height: number;
@@ -10,6 +15,7 @@ export type GeneratedArchipelago = Readonly<{
   elevations: ReadonlyArray<number>;
   landMask: ReadonlyArray<boolean>;
   islandIds: ReadonlyArray<number>;
+  pointsOfInterest: ReadonlyArray<GeneratedPointOfInterest>;
 }>;
 
 export const DEFAULT_ARCHIPELAGO_CONFIG: ArchipelagoGenerationConfig = Object.freeze({
@@ -55,6 +61,12 @@ export function generateArchipelago(
     islandIds,
     normalizedSeed,
   );
+  const pointsOfInterest = generatePointsOfInterest(
+    normalizedSeed,
+    config.width,
+    config.height,
+    islandIds,
+  );
 
   return Object.freeze({
     seed: normalizedSeed,
@@ -63,6 +75,7 @@ export function generateArchipelago(
     elevations: Object.freeze(elevations),
     landMask: Object.freeze(Array.from(islandIds, (islandId) => islandId !== 0)),
     islandIds: Object.freeze(Array.from(islandIds)),
+    pointsOfInterest,
   });
 }
 
