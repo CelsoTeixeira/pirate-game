@@ -3,7 +3,16 @@ import { WindStreaks } from '../effects/windStreaks';
 import { ModularShip, type ModularShipSailState, type ShipBuild } from '../entities/ModularShip';
 import { Ship, type SailState } from '../entities/Ship';
 import { KeyboardControls } from '../input/KeyboardControls';
-import { hideGameHud, showGameHud } from '../ui/gameHudStore';
+import {
+  gameHudStore,
+  hideGameHud,
+  initializeGameHud,
+  syncGameHudControls,
+  syncMinimapPlayerPose,
+  type MinimapPlayerPose,
+  type MinimapPointOfInterest,
+  type MinimapWorldSnapshot,
+} from '../ui/gameHudStore';
 import { Wind } from '../world/Wind';
 import {
   DEFAULT_ARCHIPELAGO_CONFIG,
@@ -29,6 +38,9 @@ const OCEAN_FRAME = 1;
 const CAMERA_FOLLOW_LERP = 0.1;
 const SPAWN_CLEARANCE_TILES = 2;
 const COLLISION_DEBUG_DEPTH = 90;
+const MINIMAP_POSE_INTERVAL_MS = 50;
+const MINIMAP_POSITION_EPSILON = 1;
+const MINIMAP_ROTATION_EPSILON = Phaser.Math.DegToRad(1);
 const TERRAIN_DEBUG_FILL_COLOR = 0xfb923c;
 const TERRAIN_DEBUG_FACE_COLOR = 0xffedd5;
 const TERRAIN_DEBUG_PADDING_TILES = 1;
@@ -65,6 +77,8 @@ export class ArchipelagoScene extends Phaser.Scene {
   private shipHullDebugGraphics?: Phaser.GameObjects.Graphics;
   private collisionDebugStatus?: Phaser.GameObjects.Text;
   private windStreaks?: WindStreaks;
+  private lastMinimapPosePublishedAt = 0;
+  private lastMinimapPlayerPose?: MinimapPlayerPose;
   private readonly wind = new Wind(0, 0.7);
 
   constructor() {
@@ -151,7 +165,15 @@ export class ArchipelagoScene extends Phaser.Scene {
     const spawn = findOpenWaterSpawn(this.archipelago, SPAWN_CLEARANCE_TILES);
     this.playerShip = new Ship(this, spawn.x, spawn.y, 'pirate');
     this.playerShip.sailState = SAIL_STATES.indexOf(this.build.sailState) as SailState;
-    showGameHud(0, this.playerShip.sailState);
+    const initialMinimapPlayerPose = this.createMinimapPlayerPose();
+    initializeGameHud({
+      rudder: 0,
+      sailState: this.playerShip.sailState,
+      minimapWorld: createMinimapWorldSnapshot(this.archipelago),
+      minimapPlayerPose: initialMinimapPlayerPose,
+    });
+    this.lastMinimapPlayerPose = initialMinimapPlayerPose;
+    this.lastMinimapPosePublishedAt = this.time.now;
     this.playerShip.setVisible(false);
     const playerBody = this.playerShip.body;
     if (playerBody instanceof Phaser.Physics.Arcade.Body) {
@@ -201,8 +223,16 @@ export class ArchipelagoScene extends Phaser.Scene {
     }).setScrollFactor(0).setDepth(100);
   }
 
-  update(_time: number, delta: number) {
+  update(time: number, delta: number) {
     if (!this.playerShip || !this.controls) {
+      return;
+    }
+
+    if (gameHudStore.getSnapshot().mapOpen) {
+      this.controls.reset();
+      this.escapeKey?.reset();
+      this.collisionDebugKey?.reset();
+      this.playerShip.setVelocity(0, 0);
       return;
     }
 
@@ -219,7 +249,8 @@ export class ArchipelagoScene extends Phaser.Scene {
 
     const rudder = this.controls.getRudder();
     this.movePlayerShip(rudder, delta);
-    showGameHud(rudder, this.playerShip.sailState);
+    syncGameHudControls(rudder, this.playerShip.sailState);
+    this.publishMinimapPlayerPose(time);
     this.syncShipVisual();
     this.drawTerrainCollisionDebug();
     this.drawShipHullDebug();
@@ -278,6 +309,45 @@ export class ArchipelagoScene extends Phaser.Scene {
       y: this.playerShip.y,
       rotation: this.playerShip.rotation,
     };
+  }
+
+  private createMinimapPlayerPose(): MinimapPlayerPose {
+    if (!this.playerShip) {
+      throw new Error('Cannot publish a minimap pose without a player ship.');
+    }
+    return Object.freeze({
+      x: this.playerShip.x,
+      y: this.playerShip.y,
+      rotation: this.playerShip.rotation,
+    });
+  }
+
+  private publishMinimapPlayerPose(time: number) {
+    if (time - this.lastMinimapPosePublishedAt < MINIMAP_POSE_INTERVAL_MS) {
+      return;
+    }
+    this.lastMinimapPosePublishedAt = time;
+
+    const nextPose = this.createMinimapPlayerPose();
+    const previousPose = this.lastMinimapPlayerPose;
+    if (previousPose) {
+      const positionDelta = Math.hypot(
+        nextPose.x - previousPose.x,
+        nextPose.y - previousPose.y,
+      );
+      const rotationDelta = Math.abs(Phaser.Math.Angle.Wrap(
+        nextPose.rotation - previousPose.rotation,
+      ));
+      if (
+        positionDelta < MINIMAP_POSITION_EPSILON
+        && rotationDelta < MINIMAP_ROTATION_EPSILON
+      ) {
+        return;
+      }
+    }
+
+    syncMinimapPlayerPose(nextPose);
+    this.lastMinimapPlayerPose = nextPose;
   }
 
   private hullOverlapsLand(pose: OrientedHullPose, footprint: OrientedHullFootprint) {
@@ -364,6 +434,8 @@ export class ArchipelagoScene extends Phaser.Scene {
 
   private handleShutdown() {
     hideGameHud();
+    this.lastMinimapPosePublishedAt = 0;
+    this.lastMinimapPlayerPose = undefined;
     this.collisionDebugGraphics?.clear();
     this.shipHullDebugGraphics?.clear();
     this.archipelago = undefined;
@@ -381,6 +453,29 @@ export class ArchipelagoScene extends Phaser.Scene {
       this.textures.remove(BLOB_TERRAIN_TEXTURE_KEY);
     }
   }
+}
+
+function createMinimapWorldSnapshot(
+  archipelago: GeneratedArchipelago,
+): MinimapWorldSnapshot {
+  const pointsOfInterest = archipelago.pointsOfInterest.map(
+    (point): MinimapPointOfInterest => Object.freeze({
+      id: point.id,
+      environment: point.environment,
+      size: point.size,
+      tileX: point.x,
+      tileY: point.y,
+    }),
+  );
+
+  return Object.freeze({
+    seed: archipelago.seed,
+    widthInTiles: archipelago.width,
+    heightInTiles: archipelago.height,
+    tileSize: TERRAIN_TILE_SIZE,
+    landMask: Object.freeze([...archipelago.landMask]),
+    pointsOfInterest: Object.freeze(pointsOfInterest),
+  });
 }
 
 type TileBounds = Readonly<{

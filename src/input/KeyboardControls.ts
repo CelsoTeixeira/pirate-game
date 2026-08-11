@@ -55,4 +55,14 @@ export class KeyboardControls {
   isAimTogglePressed(): boolean {
     return Boolean(this.aimToggleKey && Phaser.Input.Keyboard.JustDown(this.aimToggleKey));
   }
+
+  reset() {
+    this.cursors?.up.reset();
+    this.cursors?.down.reset();
+    this.cursors?.left.reset();
+    this.cursors?.right.reset();
+    Object.values(this.keys ?? {}).forEach((key) => key.reset());
+    this.anchorToggleKey?.reset();
+    this.aimToggleKey?.reset();
+  }
 }

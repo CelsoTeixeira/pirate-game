@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
 import type { RudderDirection, SailState } from '../entities/Ship';
 import { gameHudStore } from './gameHudStore';
+import { Minimap } from './Minimap';
 
 const SAIL_STATUS: Record<SailState, { label: string; asset: string }> = {
   0: {
@@ -97,9 +98,17 @@ export function GameHudOverlay() {
   }
 
   return (
-    <section className="game-hud" aria-label="Ship controls status">
-      <SailStatus sailState={hudState.sailState} />
-      <SteeringWheel rudder={hudState.rudder} />
-    </section>
+    <>
+      {hudState.minimapWorld && hudState.minimapPlayerPose ? (
+        <Minimap
+          minimapWorld={hudState.minimapWorld}
+          playerPose={hudState.minimapPlayerPose}
+        />
+      ) : null}
+      <section className="game-hud" aria-label="Ship controls status">
+        <SailStatus sailState={hudState.sailState} />
+        <SteeringWheel rudder={hudState.rudder} />
+      </section>
+    </>
   );
 }
