@@ -118,6 +118,7 @@ export class GameScene extends Phaser.Scene {
     initializeGameHud({
       rudder: 0,
       sailState: this.playerShip.sailState,
+      anchored: this.playerShip.anchored,
       resources: this.playerShip.resourceSnapshot,
     });
     this.playerShip.setVisible(false);
@@ -178,7 +179,7 @@ export class GameScene extends Phaser.Scene {
 
     const rudder = this.controls.getRudder();
     this.playerShip.sail(this.wind, rudder, delta);
-    syncGameHudControls(rudder, this.playerShip.sailState);
+    syncGameHudControls(rudder, this.playerShip.sailState, this.playerShip.anchored);
     syncGameHudResources(this.playerShip.resourceSnapshot);
     this.syncPlayerShipVisual();
     this.enemyShip?.sail(this.wind, 0, delta);

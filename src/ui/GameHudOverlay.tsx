@@ -86,6 +86,25 @@ function SailStatus({ sailState }: SailStatusProps) {
   );
 }
 
+function AnchorStatus() {
+  return (
+    <div className="game-hud__control anchor-status" role="status" aria-label="Anchor lowered">
+      <div className="anchor-status__icon" aria-hidden="true">
+        <img
+          className="anchor-status__image"
+          src="/assets/gameplay/anchor-hud.png"
+          alt=""
+          draggable={false}
+        />
+      </div>
+      <div className="game-hud__status">
+        <span className="game-hud__label">Anchor</span>
+        <span className="game-hud__value">Lowered</span>
+      </div>
+    </div>
+  );
+}
+
 type ShipResourcesProps = {
   crew: number;
   crewCapacity: number;
@@ -152,6 +171,7 @@ export function GameHudOverlay() {
       ) : null}
       <section className="game-hud" aria-label="Ship controls and resources status">
         {hudState.resources ? <ShipResources {...hudState.resources} /> : null}
+        {hudState.anchored ? <AnchorStatus /> : null}
         <SailStatus sailState={hudState.sailState} />
         <SteeringWheel rudder={hudState.rudder} />
       </section>

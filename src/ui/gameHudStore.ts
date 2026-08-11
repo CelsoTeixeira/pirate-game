@@ -29,6 +29,7 @@ export type GameHudState = Readonly<{
   mapOpen: boolean;
   rudder: RudderDirection;
   sailState: SailState;
+  anchored: boolean;
   resources: ShipResourceSnapshot | null;
   minimapWorld: MinimapWorldSnapshot | null;
   minimapPlayerPose: MinimapPlayerPose | null;
@@ -37,6 +38,7 @@ export type GameHudState = Readonly<{
 export type GameHudInitialization = Readonly<{
   rudder: RudderDirection;
   sailState: SailState;
+  anchored: boolean;
   resources: ShipResourceSnapshot;
   minimapWorld?: MinimapWorldSnapshot;
   minimapPlayerPose?: MinimapPlayerPose;
@@ -47,6 +49,7 @@ const hiddenState: GameHudState = {
   mapOpen: false,
   rudder: 0,
   sailState: 0,
+  anchored: false,
   resources: null,
   minimapWorld: null,
   minimapPlayerPose: null,
@@ -85,6 +88,7 @@ function setState(nextState: GameHudState) {
     && state.mapOpen === nextState.mapOpen
     && state.rudder === nextState.rudder
     && state.sailState === nextState.sailState
+    && state.anchored === nextState.anchored
     && resourcesAreEqual(state.resources, nextState.resources)
     && state.minimapWorld === nextState.minimapWorld
     && posesAreEqual(state.minimapPlayerPose, nextState.minimapPlayerPose)
@@ -112,6 +116,7 @@ export function initializeGameHud(initialization: GameHudInitialization) {
     mapOpen: false,
     rudder: initialization.rudder,
     sailState: initialization.sailState,
+    anchored: initialization.anchored,
     resources: initialization.resources,
     minimapWorld: initialization.minimapWorld ?? null,
     minimapPlayerPose: initialization.minimapPlayerPose ?? null,
@@ -125,11 +130,16 @@ export function setGameHudMapOpen(mapOpen: boolean) {
   });
 }
 
-export function syncGameHudControls(rudder: RudderDirection, sailState: SailState) {
+export function syncGameHudControls(
+  rudder: RudderDirection,
+  sailState: SailState,
+  anchored: boolean,
+) {
   setState({
     ...state,
     rudder,
     sailState,
+    anchored,
   });
 }
 

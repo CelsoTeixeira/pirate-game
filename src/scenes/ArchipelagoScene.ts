@@ -182,6 +182,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     initializeGameHud({
       rudder: 0,
       sailState: this.playerShip.sailState,
+      anchored: this.playerShip.anchored,
       resources: this.playerShip.resourceSnapshot,
       minimapWorld: createMinimapWorldSnapshot(this.archipelago),
       minimapPlayerPose: initialMinimapPlayerPose,
@@ -264,7 +265,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     const rudder = this.controls.getRudder();
     this.movePlayerShip(rudder, delta);
     this.updateDocking();
-    syncGameHudControls(rudder, this.playerShip.sailState);
+    syncGameHudControls(rudder, this.playerShip.sailState, this.playerShip.anchored);
     syncGameHudResources(this.playerShip.resourceSnapshot);
     this.publishMinimapPlayerPose(time);
     this.syncShipVisual();
@@ -362,6 +363,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     this.playerShip.anchored = false;
     this.playerShip.restore();
     this.currentDockingPointId = undefined;
+    syncGameHudControls(0, this.playerShip.sailState, this.playerShip.anchored);
     syncGameHudResources(this.playerShip.resourceSnapshot);
 
     const minimapPose = this.createMinimapPlayerPose();
