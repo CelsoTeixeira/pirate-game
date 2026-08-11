@@ -1,4 +1,5 @@
 import type { RudderDirection, SailState } from '../entities/Ship';
+import type { ShipResourceSnapshot } from '../entities/shipResources';
 
 export type MinimapPointOfInterest = Readonly<{
   id: string;
@@ -28,6 +29,7 @@ export type GameHudState = Readonly<{
   mapOpen: boolean;
   rudder: RudderDirection;
   sailState: SailState;
+  resources: ShipResourceSnapshot | null;
   minimapWorld: MinimapWorldSnapshot | null;
   minimapPlayerPose: MinimapPlayerPose | null;
 }>;
@@ -35,6 +37,7 @@ export type GameHudState = Readonly<{
 export type GameHudInitialization = Readonly<{
   rudder: RudderDirection;
   sailState: SailState;
+  resources: ShipResourceSnapshot;
   minimapWorld?: MinimapWorldSnapshot;
   minimapPlayerPose?: MinimapPlayerPose;
 }>;
@@ -44,6 +47,7 @@ const hiddenState: GameHudState = {
   mapOpen: false,
   rudder: 0,
   sailState: 0,
+  resources: null,
   minimapWorld: null,
   minimapPlayerPose: null,
 };
@@ -61,12 +65,27 @@ function posesAreEqual(first: MinimapPlayerPose | null, second: MinimapPlayerPos
   );
 }
 
+function resourcesAreEqual(
+  first: ShipResourceSnapshot | null,
+  second: ShipResourceSnapshot | null,
+) {
+  return first === second || (
+    first !== null
+    && second !== null
+    && first.crew === second.crew
+    && first.crewCapacity === second.crewCapacity
+    && first.supplies === second.supplies
+    && first.supplyCapacity === second.supplyCapacity
+  );
+}
+
 function setState(nextState: GameHudState) {
   if (
     state.visible === nextState.visible
     && state.mapOpen === nextState.mapOpen
     && state.rudder === nextState.rudder
     && state.sailState === nextState.sailState
+    && resourcesAreEqual(state.resources, nextState.resources)
     && state.minimapWorld === nextState.minimapWorld
     && posesAreEqual(state.minimapPlayerPose, nextState.minimapPlayerPose)
   ) {
@@ -81,7 +100,9 @@ export const gameHudStore = {
   getSnapshot: () => state,
   subscribe: (listener: () => void) => {
     listeners.add(listener);
-    return () => listeners.delete(listener);
+    return () => {
+      listeners.delete(listener);
+    };
   },
 };
 
@@ -91,6 +112,7 @@ export function initializeGameHud(initialization: GameHudInitialization) {
     mapOpen: false,
     rudder: initialization.rudder,
     sailState: initialization.sailState,
+    resources: initialization.resources,
     minimapWorld: initialization.minimapWorld ?? null,
     minimapPlayerPose: initialization.minimapPlayerPose ?? null,
   });
@@ -108,6 +130,13 @@ export function syncGameHudControls(rudder: RudderDirection, sailState: SailStat
     ...state,
     rudder,
     sailState,
+  });
+}
+
+export function syncGameHudResources(resources: ShipResourceSnapshot) {
+  setState({
+    ...state,
+    resources,
   });
 }
 

@@ -86,6 +86,51 @@ function SailStatus({ sailState }: SailStatusProps) {
   );
 }
 
+type ShipResourcesProps = {
+  crew: number;
+  crewCapacity: number;
+  supplies: number;
+  supplyCapacity: number;
+};
+
+function ShipResources({
+  crew,
+  crewCapacity,
+  supplies,
+  supplyCapacity,
+}: ShipResourcesProps) {
+  return (
+    <div className="ship-resources" role="group" aria-label="Ship resources">
+      <div className="ship-resources__item" role="status" aria-live="polite" aria-atomic="true">
+        <span className="ship-resources__icon" aria-hidden="true">
+          <img
+            className="ship-resources__image"
+            src="/assets/gameplay/crew-hud.png"
+            alt=""
+            draggable={false}
+          />
+        </span>
+        <span className="game-hud__label">Crew</span>
+        <span className="ship-resources__value">{crew} / {crewCapacity}</span>
+      </div>
+      <div className="ship-resources__item" role="status" aria-live="polite" aria-atomic="true">
+        <span className="ship-resources__icon" aria-hidden="true">
+          <img
+            className="ship-resources__image"
+            src="/assets/gameplay/supplies-hud.png"
+            alt=""
+            draggable={false}
+          />
+        </span>
+        <span className="game-hud__label">Supplies</span>
+        <span className="ship-resources__value">
+          {Math.ceil(supplies)} / {supplyCapacity}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function GameHudOverlay() {
   const hudState = useSyncExternalStore(
     gameHudStore.subscribe,
@@ -105,7 +150,8 @@ export function GameHudOverlay() {
           playerPose={hudState.minimapPlayerPose}
         />
       ) : null}
-      <section className="game-hud" aria-label="Ship controls status">
+      <section className="game-hud" aria-label="Ship controls and resources status">
+        {hudState.resources ? <ShipResources {...hudState.resources} /> : null}
         <SailStatus sailState={hudState.sailState} />
         <SteeringWheel rudder={hudState.rudder} />
       </section>

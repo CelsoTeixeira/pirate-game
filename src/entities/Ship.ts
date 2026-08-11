@@ -1,8 +1,25 @@
 import Phaser from 'phaser';
 import { CannonBall } from './CannonBall';
-import { playShipExplosion } from '../effects/effects';
+import {
+  playResourceLossEffect,
+  playShipExplosion,
+  preloadResourceLossEffectTextures,
+} from '../effects/effects';
 import shipTypes from './ship-types.json';
 import { Wind } from '../world/Wind';
+import {
+  applyDamageResourceConsequence,
+  consumeSuppliesForDistance,
+  createShipResources,
+  DAMAGE_CONSEQUENCE_HP_RATIO,
+  DAMAGE_CONSEQUENCE_ROLL_MAXIMUM,
+  DAMAGE_CONSEQUENCE_ROLL_MINIMUM,
+  getMovementSpeedMultiplier,
+  getReloadTimeMultiplier,
+  restoreShipResources,
+  type ShipHullSize,
+  type ShipResourceSnapshot,
+} from './shipResources';
 
 export type ShipCannonDefinition = {
   direction: number;
@@ -57,6 +74,8 @@ const DAMAGE_STATES = ['', '-half-damage', '-full-damage', '-destroyed'] as cons
 const BASE_TURN_SPEED_STAT = 6;
 const RUDDER_RATE_AT_BASE_TURN_SPEED = 2.5;
 
+export const SHIP_CREW_DEFEATED_EVENT = 'crew-defeated';
+
 export type SailState = 0 | 1 | 2;
 export type RudderDirection = -1 | 0 | 1;
 
@@ -72,12 +91,14 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   private readonly sailing: ShipTypeDefinition['sailing'];
   private readonly localCannonArcs: LocalCannonArc[];
   private readonly cannonSideStates: CannonSideFiringState[];
+  private resources: ShipResourceSnapshot;
 
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     type: ShipTypeKey,
+    hullSize: ShipHullSize,
     cannons = shipTypeDefinitions[type].cannons,
   ) {
     const definition = shipTypeDefinitions[type];
@@ -89,6 +110,7 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.maxHp;
     this.speed = definition.stats.speed;
     this.turnSpeed = definition.stats.turnSpeed;
+    this.resources = createShipResources(hullSize);
     this.sailing = definition.sailing;
     this.localCannonArcs = cannons.map((cannon) => ({
       centerAngle: Phaser.Math.DegToRad(cannon.direction),
@@ -114,6 +136,7 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
         scene.load.image(textureKey, `assets/${textureKey}.png`);
       }
     }
+    preloadResourceLossEffectTextures(scene);
   }
 
   get isDestroyed() {
@@ -125,14 +148,20 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   }
 
   get cannonArcs(): CannonArc[] {
+    const reloadTimeMultiplier = getReloadTimeMultiplier(this.resources);
+
     return this.localCannonArcs.map((arc, index) => ({
       centerAngle: Phaser.Math.Angle.Normalize(this.heading + arc.centerAngle),
       halfAngle: arc.halfAngle,
       range: arc.range,
-      cooldownMs: arc.cooldownMs,
+      cooldownMs: arc.cooldownMs * reloadTimeMultiplier,
       fuseMs: arc.fuseMs,
       state: this.cannonSideStates[index].state,
     }));
+  }
+
+  get resourceSnapshot(): ShipResourceSnapshot {
+    return this.resources;
   }
 
   canFireAt(targetX: number, targetY: number): boolean {
@@ -233,20 +262,66 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     const angleDiff = Math.abs(Phaser.Math.Angle.Wrap(this.heading - wind.directionRad));
     const pointsOfSail = this.getPointsOfSailMultiplier(angleDiff);
     const sailFactor = this.sailState / 2;
-    const speed = this.speed * sailFactor * wind.strength * pointsOfSail;
+    const speed = this.speed
+      * sailFactor
+      * wind.strength
+      * pointsOfSail
+      * getMovementSpeedMultiplier(this.resources);
 
     this.setVelocity(Math.cos(this.heading) * speed, Math.sin(this.heading) * speed);
   }
 
   takeDamage(amount: number) {
     const wasDestroyed = this.isDestroyed;
+    const previousHp = this.hp;
+    const previousResources = this.resources;
 
     this.hp = Math.max(0, this.hp - Math.max(0, amount));
     this.setTexture(this.getCurrentTextureKey());
 
+    if (
+      this.hp < previousHp
+      && this.hp <= this.maxHp * DAMAGE_CONSEQUENCE_HP_RATIO
+    ) {
+      this.resources = applyDamageResourceConsequence(
+        this.resources,
+        Phaser.Math.Between(
+          DAMAGE_CONSEQUENCE_ROLL_MINIMUM,
+          DAMAGE_CONSEQUENCE_ROLL_MAXIMUM,
+        ),
+      );
+    }
+
+    if (this.resources.crew < previousResources.crew) {
+      playResourceLossEffect(this.scene, this.x, this.y, 'crew');
+    }
+    if (this.resources.supplies < previousResources.supplies) {
+      playResourceLossEffect(this.scene, this.x, this.y, 'supplies');
+    }
+
     if (!wasDestroyed && this.isDestroyed) {
       playShipExplosion(this.scene, this.x, this.y);
     }
+
+    if (previousResources.crew > 0 && this.resources.crew === 0) {
+      this.emit(SHIP_CREW_DEFEATED_EVENT, this.resourceSnapshot);
+    }
+  }
+
+  consumeSuppliesForDistance(acceptedDistance: number): ShipResourceSnapshot {
+    this.resources = consumeSuppliesForDistance(this.resources, acceptedDistance);
+    return this.resourceSnapshot;
+  }
+
+  restoreResources(): ShipResourceSnapshot {
+    this.resources = restoreShipResources(this.resources);
+    return this.resourceSnapshot;
+  }
+
+  restore(): ShipResourceSnapshot {
+    this.hp = this.maxHp;
+    this.setTexture(this.getCurrentTextureKey());
+    return this.restoreResources();
   }
 
   private getCurrentTextureKey() {

@@ -74,6 +74,52 @@ body {
   min-width: 0;
 }
 
+.ship-resources {
+  align-self: stretch;
+  min-width: calc(var(--hud-control-size) * 0.95);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(6px, 1cqi, 10px);
+  padding-right: clamp(6px, 1.2cqi, 12px);
+  border-right: 1px solid rgb(214 168 102 / 42%);
+}
+
+.ship-resources__item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ship-resources__icon {
+  width: clamp(26px, 3.4cqi, 38px);
+  height: clamp(26px, 3.4cqi, 38px);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.ship-resources__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 1px rgb(0 0 0 / 48%));
+}
+
+.ship-resources__value {
+  display: block;
+  margin-top: 2px;
+  color: #fff7d6;
+  font-size: clamp(11px, 1.25cqi, 13px);
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  text-shadow: 0 1px 1px #000;
+  white-space: nowrap;
+}
+
 .game-hud__label,
 .game-hud__value {
   display: block;

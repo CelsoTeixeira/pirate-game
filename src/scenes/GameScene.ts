@@ -7,6 +7,12 @@ import { playShipImpact } from '../effects/effects';
 import { WindStreaks } from '../effects/windStreaks';
 import { TargetReticle } from '../entities/TargetReticle';
 import { KeyboardControls } from '../input/KeyboardControls';
+import {
+  hideGameHud,
+  initializeGameHud,
+  syncGameHudControls,
+  syncGameHudResources,
+} from '../ui/gameHudStore';
 import { WindCompass } from '../ui/WindCompass';
 import { Wind } from '../world/Wind';
 
@@ -52,6 +58,7 @@ export class GameScene extends Phaser.Scene {
   private debugReadout?: Phaser.GameObjects.Text;
   private windStreaks?: WindStreaks;
   private windCompass?: WindCompass;
+  private lastPlayerPosition?: Readonly<{ x: number; y: number }>;
   private wind = new Wind(0, 0.7);
   private aimMode = false;
 
@@ -74,6 +81,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
     this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
     this.cameras.main
       .setBackgroundColor('#082f49')
@@ -102,9 +110,16 @@ export class GameScene extends Phaser.Scene {
       PLAYER_START,
       PLAYER_START,
       'pirate',
+      this.build.size,
       this.createPlayerCannonDefinitions(this.build),
     );
     this.playerShip.sailState = this.toGameSailState(this.build.sailState);
+    this.lastPlayerPosition = { x: this.playerShip.x, y: this.playerShip.y };
+    initializeGameHud({
+      rudder: 0,
+      sailState: this.playerShip.sailState,
+      resources: this.playerShip.resourceSnapshot,
+    });
     this.playerShip.setVisible(false);
     this.playerShipVisual = new ModularShip(this, this.playerShip.x, this.playerShip.y, this.build)
       .applyBuild(this.build)
@@ -115,6 +130,7 @@ export class GameScene extends Phaser.Scene {
       PLAYER_START + ENEMY_OFFSET_X,
       PLAYER_START + ENEMY_OFFSET_Y,
       'white',
+      'medium',
     );
     this.enemyShip.anchored = true;
     this.damageableShips = [this.enemyShip];
@@ -143,6 +159,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.consumeAcceptedPlayerTravel();
     this.updateDebugWindControls();
     this.windStreaks?.update();
     this.windCompass?.update(this.wind);
@@ -159,7 +176,10 @@ export class GameScene extends Phaser.Scene {
       this.playerShip.toggleAnchor();
     }
 
-    this.playerShip.sail(this.wind, this.controls.getRudder(), delta);
+    const rudder = this.controls.getRudder();
+    this.playerShip.sail(this.wind, rudder, delta);
+    syncGameHudControls(rudder, this.playerShip.sailState);
+    syncGameHudResources(this.playerShip.resourceSnapshot);
     this.syncPlayerShipVisual();
     this.enemyShip?.sail(this.wind, 0, delta);
     this.updateDebugReadout();
@@ -306,6 +326,44 @@ export class GameScene extends Phaser.Scene {
     if (this.playerShipVisual.config.sailState !== sailState) {
       this.playerShipVisual.setSailState(sailState);
     }
+  }
+
+  private consumeAcceptedPlayerTravel() {
+    if (!this.playerShip || !this.lastPlayerPosition) {
+      return;
+    }
+
+    const acceptedDistance = Math.hypot(
+      this.playerShip.x - this.lastPlayerPosition.x,
+      this.playerShip.y - this.lastPlayerPosition.y,
+    );
+    this.playerShip.consumeSuppliesForDistance(acceptedDistance);
+    this.lastPlayerPosition = { x: this.playerShip.x, y: this.playerShip.y };
+  }
+
+  private handleShutdown() {
+    hideGameHud();
+    this.input.off('pointerdown', this.handlePointerDown, this);
+    this.playerShip?.off('cannonball-fired', this.handlePlayerCannonBallFired, this);
+    this.cannonArcGraphics?.clear();
+    this.playerShip = undefined;
+    this.playerShipVisual = undefined;
+    this.build = undefined;
+    this.enemyShip = undefined;
+    this.damageableShips = [];
+    this.controls = undefined;
+    this.damageKey = undefined;
+    this.windRotateLeftKey = undefined;
+    this.windRotateRightKey = undefined;
+    this.windDecreaseKey = undefined;
+    this.windIncreaseKey = undefined;
+    this.targetReticle = undefined;
+    this.cannonArcGraphics = undefined;
+    this.debugReadout = undefined;
+    this.windStreaks = undefined;
+    this.windCompass = undefined;
+    this.lastPlayerPosition = undefined;
+    this.aimMode = false;
   }
 
   private updateDebugReadout() {

@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { WindStreaks } from '../effects/windStreaks';
 import { ModularShip, type ModularShipSailState, type ShipBuild } from '../entities/ModularShip';
-import { Ship, type SailState } from '../entities/Ship';
+import { SHIP_CREW_DEFEATED_EVENT, Ship, type SailState } from '../entities/Ship';
 import { KeyboardControls } from '../input/KeyboardControls';
 import {
   gameHudStore,
   hideGameHud,
   initializeGameHud,
   syncGameHudControls,
+  syncGameHudResources,
   syncMinimapPlayerPose,
   type MinimapPlayerPose,
   type MinimapPointOfInterest,
@@ -37,15 +38,16 @@ const TERRAIN_MATERIAL_PATH = 'assets/terrain/terrain-atlas-64.png';
 const OCEAN_FRAME = 1;
 const CAMERA_FOLLOW_LERP = 0.1;
 const SPAWN_CLEARANCE_TILES = 2;
+const DOCKING_RANGE_TILES = 2.5;
 const COLLISION_DEBUG_DEPTH = 90;
-const MINIMAP_POSE_INTERVAL_MS = 50;
-const MINIMAP_POSITION_EPSILON = 1;
-const MINIMAP_ROTATION_EPSILON = Phaser.Math.DegToRad(1);
 const TERRAIN_DEBUG_FILL_COLOR = 0xfb923c;
 const TERRAIN_DEBUG_FACE_COLOR = 0xffedd5;
 const TERRAIN_DEBUG_PADDING_TILES = 1;
 const SHIP_BODY_DEBUG_COLOR = 0x22d3ee;
 const SHIP_WORLD_SCALE = 0.6;
+const MINIMAP_POSE_INTERVAL_MS = 50;
+const MINIMAP_POSITION_EPSILON = 1;
+const MINIMAP_ROTATION_EPSILON = Phaser.Math.DegToRad(1);
 const SHIP_SCALES: Record<ShipBuild['size'], number> = {
   small: 0.33 * SHIP_WORLD_SCALE,
   medium: 0.15 * SHIP_WORLD_SCALE,
@@ -63,6 +65,11 @@ type ArchipelagoSceneData = Readonly<{
   build?: ShipBuild;
 }>;
 
+type LandPointOfInterest = Extract<
+  GeneratedArchipelago['pointsOfInterest'][number],
+  { environment: 'land' }
+>;
+
 export class ArchipelagoScene extends Phaser.Scene {
   private seed = 0;
   private build?: ShipBuild;
@@ -77,6 +84,7 @@ export class ArchipelagoScene extends Phaser.Scene {
   private shipHullDebugGraphics?: Phaser.GameObjects.Graphics;
   private collisionDebugStatus?: Phaser.GameObjects.Text;
   private windStreaks?: WindStreaks;
+  private currentDockingPointId?: string;
   private lastMinimapPosePublishedAt = 0;
   private lastMinimapPlayerPose?: MinimapPlayerPose;
   private readonly wind = new Wind(0, 0.7);
@@ -163,12 +171,18 @@ export class ArchipelagoScene extends Phaser.Scene {
       .setVisible(false);
 
     const spawn = findOpenWaterSpawn(this.archipelago, SPAWN_CLEARANCE_TILES);
-    this.playerShip = new Ship(this, spawn.x, spawn.y, 'pirate');
+    this.playerShip = new Ship(this, spawn.x, spawn.y, 'pirate', this.build.size);
     this.playerShip.sailState = SAIL_STATES.indexOf(this.build.sailState) as SailState;
+    this.playerShip.on(
+      SHIP_CREW_DEFEATED_EVENT,
+      this.handlePlayerCrewDefeated,
+      this,
+    );
     const initialMinimapPlayerPose = this.createMinimapPlayerPose();
     initializeGameHud({
       rudder: 0,
       sailState: this.playerShip.sailState,
+      resources: this.playerShip.resourceSnapshot,
       minimapWorld: createMinimapWorldSnapshot(this.archipelago),
       minimapPlayerPose: initialMinimapPlayerPose,
     });
@@ -249,7 +263,9 @@ export class ArchipelagoScene extends Phaser.Scene {
 
     const rudder = this.controls.getRudder();
     this.movePlayerShip(rudder, delta);
+    this.updateDocking();
     syncGameHudControls(rudder, this.playerShip.sailState);
+    syncGameHudResources(this.playerShip.resourceSnapshot);
     this.publishMinimapPlayerPose(time);
     this.syncShipVisual();
     this.drawTerrainCollisionDebug();
@@ -284,20 +300,75 @@ export class ArchipelagoScene extends Phaser.Scene {
 
     if (!this.hullOverlapsLand({ x: targetX, y: targetY, rotation }, footprint)) {
       this.playerShip.setPosition(targetX, targetY);
+    } else {
+      // Resolve each axis independently so the ship can slide along a coast.
+      if (!this.hullOverlapsLand({ x: targetX, y: previousPose.y, rotation }, footprint)) {
+        this.playerShip.x = targetX;
+      } else {
+        body.velocity.x = 0;
+      }
+      if (!this.hullOverlapsLand({ x: this.playerShip.x, y: targetY, rotation }, footprint)) {
+        this.playerShip.y = targetY;
+      } else {
+        body.velocity.y = 0;
+      }
+    }
+
+    const acceptedDistance = Math.hypot(
+      this.playerShip.x - previousPose.x,
+      this.playerShip.y - previousPose.y,
+    );
+    this.playerShip.consumeSuppliesForDistance(acceptedDistance);
+  }
+
+  private updateDocking() {
+    if (!this.playerShip || !this.archipelago) {
       return;
     }
 
-    // Resolve each axis independently so the ship can slide along a coast.
-    if (!this.hullOverlapsLand({ x: targetX, y: previousPose.y, rotation }, footprint)) {
-      this.playerShip.x = targetX;
-    } else {
-      body.velocity.x = 0;
+    const dockingPoint = findDockingLandPoint(
+      this.archipelago,
+      this.playerShip.x,
+      this.playerShip.y,
+      DOCKING_RANGE_TILES * TERRAIN_TILE_SIZE,
+    );
+    if (!dockingPoint) {
+      this.currentDockingPointId = undefined;
+      return;
     }
-    if (!this.hullOverlapsLand({ x: this.playerShip.x, y: targetY, rotation }, footprint)) {
-      this.playerShip.y = targetY;
-    } else {
-      body.velocity.y = 0;
+    if (dockingPoint.id === this.currentDockingPointId) {
+      return;
     }
+
+    this.currentDockingPointId = dockingPoint.id;
+    this.playerShip.restoreResources();
+  }
+
+  private handlePlayerCrewDefeated() {
+    if (!this.playerShip || !this.archipelago) {
+      return;
+    }
+
+    const respawn = findCrewDefeatRespawn(
+      this.archipelago,
+      this.playerShip.x,
+      this.playerShip.y,
+      SPAWN_CLEARANCE_TILES,
+    );
+    this.playerShip
+      .setPosition(respawn.x, respawn.y)
+      .setRotation(0)
+      .setVelocity(0, 0);
+    this.playerShip.anchored = false;
+    this.playerShip.restore();
+    this.currentDockingPointId = undefined;
+    syncGameHudResources(this.playerShip.resourceSnapshot);
+
+    const minimapPose = this.createMinimapPlayerPose();
+    syncMinimapPlayerPose(minimapPose);
+    this.lastMinimapPlayerPose = minimapPose;
+    this.lastMinimapPosePublishedAt = this.time.now;
+    this.syncShipVisual();
   }
 
   private getPlayerHullPose(): OrientedHullPose {
@@ -434,6 +505,12 @@ export class ArchipelagoScene extends Phaser.Scene {
 
   private handleShutdown() {
     hideGameHud();
+    this.playerShip?.off(
+      SHIP_CREW_DEFEATED_EVENT,
+      this.handlePlayerCrewDefeated,
+      this,
+    );
+    this.currentDockingPointId = undefined;
     this.lastMinimapPosePublishedAt = 0;
     this.lastMinimapPlayerPose = undefined;
     this.collisionDebugGraphics?.clear();
@@ -520,6 +597,104 @@ function findOpenWaterSpawn(
   }
 
   throw new Error('Generated archipelago has no safe open-water ship spawn.');
+}
+
+function findDockingLandPoint(
+  archipelago: GeneratedArchipelago,
+  worldX: number,
+  worldY: number,
+  dockingRange: number,
+): LandPointOfInterest | undefined {
+  const dockingRangeSquared = dockingRange * dockingRange;
+  let nearestPoint: LandPointOfInterest | undefined;
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+
+  for (const point of archipelago.pointsOfInterest) {
+    if (point.environment !== 'land') {
+      continue;
+    }
+    const pointWorldX = (point.x + 0.5) * TERRAIN_TILE_SIZE;
+    const pointWorldY = (point.y + 0.5) * TERRAIN_TILE_SIZE;
+    const distanceSquared = (pointWorldX - worldX) ** 2 + (pointWorldY - worldY) ** 2;
+    if (
+      distanceSquared <= dockingRangeSquared
+      && (
+        distanceSquared < nearestDistanceSquared
+        || (
+          distanceSquared === nearestDistanceSquared
+          && point.id < (nearestPoint?.id ?? '')
+        )
+      )
+    ) {
+      nearestPoint = point;
+      nearestDistanceSquared = distanceSquared;
+    }
+  }
+
+  return nearestPoint;
+}
+
+function findCrewDefeatRespawn(
+  archipelago: GeneratedArchipelago,
+  worldX: number,
+  worldY: number,
+  clearance: number,
+): Readonly<{ x: number; y: number }> {
+  const nearestLandPoint = archipelago.pointsOfInterest
+    .filter((point): point is LandPointOfInterest => point.environment === 'land')
+    .reduce<LandPointOfInterest | undefined>((nearestPoint, point) => {
+      if (!nearestPoint) {
+        return point;
+      }
+      const pointDistance = distanceSquaredToWorldPoint(point, worldX, worldY);
+      const nearestDistance = distanceSquaredToWorldPoint(nearestPoint, worldX, worldY);
+      return pointDistance < nearestDistance
+        || (pointDistance === nearestDistance && point.id < nearestPoint.id)
+        ? point
+        : nearestPoint;
+    }, undefined);
+
+  if (!nearestLandPoint) {
+    return findOpenWaterSpawn(archipelago, clearance);
+  }
+
+  let nearestWaterIndex = -1;
+  let nearestWaterDistanceSquared = Number.POSITIVE_INFINITY;
+  for (let y = clearance; y < archipelago.height - clearance; y += 1) {
+    for (let x = clearance; x < archipelago.width - clearance; x += 1) {
+      if (!hasWaterClearance(archipelago, x, y, clearance)) {
+        continue;
+      }
+      const distanceSquared = (x - nearestLandPoint.x) ** 2 + (y - nearestLandPoint.y) ** 2;
+      const cellIndex = y * archipelago.width + x;
+      if (
+        distanceSquared < nearestWaterDistanceSquared
+        || (distanceSquared === nearestWaterDistanceSquared && cellIndex < nearestWaterIndex)
+      ) {
+        nearestWaterIndex = cellIndex;
+        nearestWaterDistanceSquared = distanceSquared;
+      }
+    }
+  }
+
+  if (nearestWaterIndex < 0) {
+    throw new Error('Generated archipelago has no safe crew-defeat respawn.');
+  }
+
+  return {
+    x: (nearestWaterIndex % archipelago.width + 0.5) * TERRAIN_TILE_SIZE,
+    y: (Math.floor(nearestWaterIndex / archipelago.width) + 0.5) * TERRAIN_TILE_SIZE,
+  };
+}
+
+function distanceSquaredToWorldPoint(
+  point: LandPointOfInterest,
+  worldX: number,
+  worldY: number,
+) {
+  const pointWorldX = (point.x + 0.5) * TERRAIN_TILE_SIZE;
+  const pointWorldY = (point.y + 0.5) * TERRAIN_TILE_SIZE;
+  return (pointWorldX - worldX) ** 2 + (pointWorldY - worldY) ** 2;
 }
 
 function hasWaterClearance(
