@@ -3,6 +3,7 @@ import { WindStreaks } from '../effects/windStreaks';
 import { ModularShip, type ModularShipSailState, type ShipBuild } from '../entities/ModularShip';
 import { Ship, type SailState } from '../entities/Ship';
 import { KeyboardControls } from '../input/KeyboardControls';
+import { hideGameHud, showGameHud } from '../ui/gameHudStore';
 import { Wind } from '../world/Wind';
 import {
   DEFAULT_ARCHIPELAGO_CONFIG,
@@ -150,6 +151,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     const spawn = findOpenWaterSpawn(this.archipelago, SPAWN_CLEARANCE_TILES);
     this.playerShip = new Ship(this, spawn.x, spawn.y, 'pirate');
     this.playerShip.sailState = SAIL_STATES.indexOf(this.build.sailState) as SailState;
+    showGameHud(0, this.playerShip.sailState);
     this.playerShip.setVisible(false);
     const playerBody = this.playerShip.body;
     if (playerBody instanceof Phaser.Physics.Arcade.Body) {
@@ -215,7 +217,9 @@ export class ArchipelagoScene extends Phaser.Scene {
     if (this.controls.isSailDownJustPressed()) this.playerShip.lowerSail();
     if (this.controls.isAnchorTogglePressed()) this.playerShip.toggleAnchor();
 
-    this.movePlayerShip(this.controls.getRudder(), delta);
+    const rudder = this.controls.getRudder();
+    this.movePlayerShip(rudder, delta);
+    showGameHud(rudder, this.playerShip.sailState);
     this.syncShipVisual();
     this.drawTerrainCollisionDebug();
     this.drawShipHullDebug();
@@ -359,6 +363,7 @@ export class ArchipelagoScene extends Phaser.Scene {
   }
 
   private handleShutdown() {
+    hideGameHud();
     this.collisionDebugGraphics?.clear();
     this.shipHullDebugGraphics?.clear();
     this.archipelago = undefined;

@@ -1,0 +1,179 @@
+:root {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #fef3c7;
+  background: #031824;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: #031824;
+}
+
+#game-shell {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  overflow: hidden;
+  container-type: size;
+}
+
+#game,
+#game-ui {
+  position: absolute;
+  inset: 0;
+}
+
+#game canvas {
+  display: block;
+}
+
+#game-ui {
+  z-index: 10;
+  pointer-events: none;
+}
+
+.game-hud {
+  --hud-control-size: clamp(56px, min(13cqi, 23cqb), 116px);
+
+  position: absolute;
+  right: clamp(8px, 2.4cqi, 24px);
+  bottom: clamp(8px, 2.4cqi, 24px);
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(5px, 1.2cqi, 12px);
+  padding: clamp(5px, 1.1cqi, 11px);
+  color: #fff7d6;
+  background: linear-gradient(180deg, rgb(18 42 49 / 88%), rgb(7 24 31 / 92%));
+  border: clamp(1px, 0.22cqi, 2px) solid #936c3c;
+  border-radius: clamp(7px, 1.2cqi, 12px);
+  box-shadow:
+    0 0 0 clamp(1px, 0.2cqi, 2px) rgb(22 13 9 / 78%),
+    0 clamp(3px, 0.8cqi, 8px) clamp(7px, 1.6cqi, 16px) rgb(0 0 0 / 38%);
+  user-select: none;
+}
+
+.game-hud__control {
+  width: var(--hud-control-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.game-hud__label,
+.game-hud__value {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #000;
+}
+
+.game-hud__status {
+  width: 100%;
+}
+
+.game-hud__label {
+  margin-top: clamp(1px, 0.35cqi, 4px);
+  color: #d6a866;
+  font-size: clamp(9px, 1.1cqi, 11px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.game-hud__value {
+  margin-top: 2px;
+  font-size: clamp(9px, 1cqi, 10px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.steering-wheel__svg {
+  width: var(--hud-control-size);
+  height: var(--hud-control-size);
+  overflow: visible;
+  filter: drop-shadow(0 3px 2px rgb(0 0 0 / 48%));
+}
+
+.steering-wheel__rotor {
+  transform: rotate(var(--wheel-angle));
+  transform-origin: 70px 70px;
+  transition: transform 140ms ease-out;
+}
+
+.steering-wheel__handle,
+.steering-wheel__spoke,
+.steering-wheel__rim,
+.steering-wheel__hub {
+  stroke: #3e2415;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.steering-wheel__handle,
+.steering-wheel__rim,
+.steering-wheel__hub {
+  fill: #a96d2d;
+}
+
+.steering-wheel__spoke {
+  fill: none;
+}
+
+.steering-wheel__rim-shadow,
+.steering-wheel__hub-shadow {
+  fill: #3e2415;
+}
+
+.steering-wheel__rim {
+  fill: none;
+  stroke: #bf8137;
+  stroke-width: 10;
+}
+
+.steering-wheel__hub {
+  fill: #d99a43;
+}
+
+.sail-status__art {
+  position: relative;
+  width: calc(var(--hud-control-size) * 0.78);
+  height: var(--hud-control-size);
+  overflow: hidden;
+}
+
+.sail-status__image {
+  position: absolute;
+  top: calc(var(--hud-control-size) * -0.21);
+  left: calc(var(--hud-control-size) * -0.4);
+  width: calc(var(--hud-control-size) * 1.55);
+  max-width: none;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 3px 2px rgb(0 0 0 / 52%));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steering-wheel__rotor {
+    transition: none;
+  }
+}
