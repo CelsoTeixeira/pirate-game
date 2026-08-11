@@ -84,6 +84,7 @@ export class ArchipelagoScene extends Phaser.Scene {
   private shipHullDebugGraphics?: Phaser.GameObjects.Graphics;
   private collisionDebugStatus?: Phaser.GameObjects.Text;
   private windStreaks?: WindStreaks;
+  private oceanTileSprite?: Phaser.GameObjects.TileSprite;
   private currentDockingPointId?: string;
   private lastMinimapPosePublishedAt = 0;
   private lastMinimapPlayerPose?: MinimapPlayerPose;
@@ -118,6 +119,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     }
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.resizeOceanToCamera, this);
     this.archipelago = generateArchipelago(this.seed, DEFAULT_ARCHIPELAGO_CONFIG);
     createBlobTerrainAtlas(this, TERRAIN_MATERIAL_KEY);
 
@@ -128,19 +130,21 @@ export class ArchipelagoScene extends Phaser.Scene {
       .setBackgroundColor('#082f49')
       .setBounds(0, 0, worldWidth, worldHeight);
 
-    this.add.tileSprite(
-      0,
-      0,
-      worldWidth,
-      worldHeight,
+    this.oceanTileSprite = this.add.tileSprite(
+      this.cameras.main.x,
+      this.cameras.main.y,
+      this.cameras.main.width,
+      this.cameras.main.height,
       TERRAIN_MATERIAL_KEY,
       OCEAN_FRAME,
-    ).setOrigin(0).setDepth(-30);
+    ).setOrigin(0).setScrollFactor(0).setDepth(-30);
+    this.syncOceanToCamera();
 
     const map = this.make.tilemap({
       data: buildTerrainTileIndices(this.archipelago),
       tileWidth: TERRAIN_TILE_SIZE,
       tileHeight: TERRAIN_TILE_SIZE,
+      insertNull: true,
     });
     const tileset = map.addTilesetImage(
       BLOB_TERRAIN_TEXTURE_KEY,
@@ -272,6 +276,30 @@ export class ArchipelagoScene extends Phaser.Scene {
     this.drawTerrainCollisionDebug();
     this.drawShipHullDebug();
     this.windStreaks?.update();
+    this.syncOceanToCamera();
+  }
+
+  private syncOceanToCamera() {
+    const ocean = this.oceanTileSprite;
+    if (!ocean) {
+      return;
+    }
+
+    const worldView = this.cameras.main.worldView;
+    ocean.setTilePosition(worldView.left, worldView.top);
+  }
+
+  private resizeOceanToCamera() {
+    const ocean = this.oceanTileSprite;
+    if (!ocean) {
+      return;
+    }
+
+    const camera = this.cameras.main;
+    ocean
+      .setPosition(camera.x, camera.y)
+      .setSize(camera.width, camera.height);
+    this.syncOceanToCamera();
   }
 
   private movePlayerShip(rudder: -1 | 0 | 1, delta: number) {
@@ -506,6 +534,7 @@ export class ArchipelagoScene extends Phaser.Scene {
   }
 
   private handleShutdown() {
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.resizeOceanToCamera, this);
     hideGameHud();
     this.playerShip?.off(
       SHIP_CREW_DEFEATED_EVENT,
@@ -528,6 +557,7 @@ export class ArchipelagoScene extends Phaser.Scene {
     this.shipHullDebugGraphics = undefined;
     this.collisionDebugStatus = undefined;
     this.windStreaks = undefined;
+    this.oceanTileSprite = undefined;
     if (this.textures.exists(BLOB_TERRAIN_TEXTURE_KEY)) {
       this.textures.remove(BLOB_TERRAIN_TEXTURE_KEY);
     }
