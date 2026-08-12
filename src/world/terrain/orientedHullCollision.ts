@@ -21,7 +21,13 @@ export type HullPoint = Readonly<{
   y: number;
 }>;
 
+export type HullTurnResolution = Readonly<{
+  pose: OrientedHullPose;
+  backstep: number;
+}>;
+
 const COLLISION_EPSILON = 0.001;
+const TURN_BACKSTEP_SEARCH_STEP = 0.25;
 
 /**
  * Returns the four world-space corners of a hull whose long axis points along
@@ -87,6 +93,72 @@ export function orientedHullOverlapsLand(
   }
 
   return false;
+}
+
+export function resolveOrientedHullTurn(
+  previousPose: OrientedHullPose,
+  attemptedRotation: number,
+  footprint: OrientedHullFootprint,
+  grid: LandCollisionGrid,
+): HullTurnResolution {
+  const attemptedPose: OrientedHullPose = {
+    x: previousPose.x,
+    y: previousPose.y,
+    rotation: attemptedRotation,
+  };
+  if (!orientedHullOverlapsLand(attemptedPose, footprint, grid)) {
+    return { pose: attemptedPose, backstep: 0 };
+  }
+
+  const maximumBackstep = getMaximumHullCornerSweep(
+    previousPose.rotation,
+    attemptedRotation,
+    footprint,
+  );
+  if (maximumBackstep <= COLLISION_EPSILON) {
+    return { pose: previousPose, backstep: 0 };
+  }
+
+  const heading = attemptedRotation + Math.PI / 2;
+  const searchStep = Math.min(TURN_BACKSTEP_SEARCH_STEP, maximumBackstep);
+  for (let distance = searchStep; distance < maximumBackstep; distance += searchStep) {
+    const candidate: OrientedHullPose = {
+      x: previousPose.x - Math.cos(heading) * distance,
+      y: previousPose.y - Math.sin(heading) * distance,
+      rotation: attemptedRotation,
+    };
+    if (!orientedHullOverlapsLand(candidate, footprint, grid)) {
+      return { pose: candidate, backstep: distance };
+    }
+  }
+
+  const endpointCandidate: OrientedHullPose = {
+    x: previousPose.x - Math.cos(heading) * maximumBackstep,
+    y: previousPose.y - Math.sin(heading) * maximumBackstep,
+    rotation: attemptedRotation,
+  };
+  if (!orientedHullOverlapsLand(endpointCandidate, footprint, grid)) {
+    return { pose: endpointCandidate, backstep: maximumBackstep };
+  }
+
+  return { pose: previousPose, backstep: 0 };
+}
+
+/**
+ * Returns the greatest distance any hull corner travels during the attempted
+ * rotation. A sternward recovery never needs to move farther than this bound.
+ */
+export function getMaximumHullCornerSweep(
+  previousRotation: number,
+  attemptedRotation: number,
+  footprint: OrientedHullFootprint,
+): number {
+  const angularDelta = Math.abs(Math.atan2(
+    Math.sin(attemptedRotation - previousRotation),
+    Math.cos(attemptedRotation - previousRotation),
+  ));
+  const cornerRadius = Math.hypot(footprint.width / 2, footprint.length / 2);
+  return 2 * cornerRadius * Math.sin(Math.min(Math.PI, angularDelta) / 2);
 }
 
 function orientedRectangleOverlapsTile(

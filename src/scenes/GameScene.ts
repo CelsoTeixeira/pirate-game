@@ -40,6 +40,7 @@ import {
 import {
   getOrientedHullCorners,
   orientedHullOverlapsLand,
+  resolveOrientedHullTurn,
   type OrientedHullFootprint,
   type OrientedHullPose,
 } from '../world/terrain/orientedHullCollision';
@@ -428,7 +429,24 @@ export class GameScene extends Phaser.Scene {
     const footprint = SHIP_HULL_FOOTPRINTS[this.build.size];
     this.playerShip.sail(this.wind, rudder, delta);
 
-    if (this.hullOverlapsLand(this.getPlayerHullPose(), footprint)) {
+    const canRecoverBlockedTurn = !this.playerShip.anchored && this.playerShip.sailState > 0;
+    if (canRecoverBlockedTurn) {
+      const turnResolution = resolveOrientedHullTurn(
+        previousPose,
+        this.playerShip.rotation,
+        footprint,
+        this.getCollisionGrid(),
+      );
+      if (turnResolution.backstep > 0) {
+        this.playerShip.setPosition(turnResolution.pose.x, turnResolution.pose.y);
+        this.playerShip.rotation = turnResolution.pose.rotation;
+        this.playerShip.sail(this.wind, 0, 0);
+      } else if (turnResolution.pose.rotation === previousPose.rotation) {
+        this.playerShip.rotation = previousPose.rotation;
+        // Recalculate the sailing vector for the accepted heading.
+        this.playerShip.sail(this.wind, 0, 0);
+      }
+    } else if (this.hullOverlapsLand(this.getPlayerHullPose(), footprint)) {
       this.playerShip.rotation = previousPose.rotation;
       // Recalculate the sailing vector for the accepted heading.
       this.playerShip.sail(this.wind, 0, 0);
@@ -440,15 +458,16 @@ export class GameScene extends Phaser.Scene {
     }
 
     const seconds = Math.min(delta, 50) / 1000;
-    const targetX = previousPose.x + body.velocity.x * seconds;
-    const targetY = previousPose.y + body.velocity.y * seconds;
+    const movementStartPose = this.getPlayerHullPose();
+    const targetX = movementStartPose.x + body.velocity.x * seconds;
+    const targetY = movementStartPose.y + body.velocity.y * seconds;
     const rotation = this.playerShip.rotation;
 
     if (!this.hullOverlapsLand({ x: targetX, y: targetY, rotation }, footprint)) {
       this.playerShip.setPosition(targetX, targetY);
     } else {
       // Resolve each axis independently so the ship can slide along a coast.
-      if (!this.hullOverlapsLand({ x: targetX, y: previousPose.y, rotation }, footprint)) {
+      if (!this.hullOverlapsLand({ x: targetX, y: movementStartPose.y, rotation }, footprint)) {
         this.playerShip.x = targetX;
       } else {
         body.velocity.x = 0;
@@ -572,12 +591,19 @@ export class GameScene extends Phaser.Scene {
     if (!this.archipelago) {
       return false;
     }
-    return orientedHullOverlapsLand(pose, footprint, {
+    return orientedHullOverlapsLand(pose, footprint, this.getCollisionGrid());
+  }
+
+  private getCollisionGrid() {
+    if (!this.archipelago) {
+      throw new Error('GameScene collision grid is unavailable before world creation.');
+    }
+    return {
       width: this.archipelago.width,
       height: this.archipelago.height,
       tileSize: TERRAIN_TILE_SIZE,
       landMask: this.archipelago.landMask,
-    });
+    };
   }
 
   private syncShipVisual() {
