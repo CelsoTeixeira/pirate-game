@@ -102,7 +102,9 @@ const MODULE_LAYOUT_SEED_SALT = 0x7f4a_7c15;
 const NATURAL_FEATURE_SEED_SALT = 0x4d3c_2b1a;
 const WATER_LAYOUT_SEED_SALT = 0x91e5_a53c;
 const WATER_COAST_CLEARANCE = 3;
-const WATER_ENCOUNTER_MINIMUM_SPACING = 16;
+// A 64x64 generation map needs a tighter encounter spacing than the former
+// 256x256 layout or the greedy water placement can exhaust its candidates.
+const WATER_ENCOUNTER_MINIMUM_SPACING = 12;
 
 const ISLAND_IDENTITIES: ReadonlyArray<IslandIdentity> = [
   'forested',
@@ -111,10 +113,12 @@ const ISLAND_IDENTITIES: ReadonlyArray<IslandIdentity> = [
   'tropical',
 ];
 
+// Reserve the two identity-constrained settlement kinds before flexible
+// placements consume their only compatible islands on compact maps.
 const LAND_KINDS: ReadonlyArray<LandPointOfInterest['kind']> = [
+  'fortress',
   'city',
   'trading-post',
-  'fortress',
   'pirate-hub',
 ];
 
@@ -246,12 +250,20 @@ function createIslandCompositions(
   islands: ReadonlyArray<IslandCells>,
 ): GeneratedIslandComposition[] {
   const identityOffset = hashToInteger(seed ^ POI_LAYOUT_SEED_SALT, ISLAND_IDENTITIES.length);
-  return islands.map((island, index) => Object.freeze({
-    islandId: island.id,
-    size: getIslandSize(island.cells.length),
-    identity: ISLAND_IDENTITIES[(identityOffset + index) % ISLAND_IDENTITIES.length],
-    cells: Object.freeze(island.cells.map((cellIndex) => cellFromIndex(cellIndex, width))),
-  }));
+  const identityCursors: Record<PoiSize, number> = { small: 0, medium: 0, big: 0 };
+  return islands.map((island) => {
+    const size = getIslandSize(island.cells.length);
+    const identity = ISLAND_IDENTITIES[
+      (identityOffset + identityCursors[size]) % ISLAND_IDENTITIES.length
+    ];
+    identityCursors[size] += 1;
+    return Object.freeze({
+      islandId: island.id,
+      size,
+      identity,
+      cells: Object.freeze(island.cells.map((cellIndex) => cellFromIndex(cellIndex, width))),
+    });
+  });
 }
 
 function generateLandPointsAndModules(

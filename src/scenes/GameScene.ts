@@ -61,6 +61,19 @@ const SHIP_WORLD_SCALE = 0.6;
 const MINIMAP_POSE_INTERVAL_MS = 50;
 const MINIMAP_POSITION_EPSILON = 1;
 const MINIMAP_ROTATION_EPSILON = Phaser.Math.DegToRad(1);
+const GENERATION_DEBUG_DEPTH = 88;
+const DEBUG_PANEL_WIDTH = 332;
+const DEBUG_PANEL_HEIGHT = 288;
+const DEBUG_PANEL_MARGIN = 12;
+const FREE_CAMERA_SPEED = 720;
+const FREE_CAMERA_MIN_ZOOM = 0.5;
+const FREE_CAMERA_MAX_ZOOM = 2.4;
+const DEBUG_DETAIL_COLORS = Object.freeze({
+  settlement: 0x67e8f9,
+  natural: 0x86efac,
+  landPoi: 0xfbbf24,
+  waterPoi: 0x60a5fa,
+});
 type WaterPointOfInterest = Extract<GeneratedPointOfInterest, { environment: 'water' }>;
 type WaterPointOfInterestKind = WaterPointOfInterest['kind'];
 type PointOfInterestTexture = Readonly<{
@@ -139,6 +152,38 @@ export class GameScene extends Phaser.Scene {
   private collisionDebugGraphics?: Phaser.GameObjects.Graphics;
   private shipHullDebugGraphics?: Phaser.GameObjects.Graphics;
   private collisionDebugStatus?: Phaser.GameObjects.Text;
+  private generationGridDebugGraphics?: Phaser.GameObjects.Graphics;
+  private windDebugGraphics?: Phaser.GameObjects.Graphics;
+  private poiDebugGraphics?: Phaser.GameObjects.Graphics;
+  private detailDebugGraphics?: Phaser.GameObjects.Graphics;
+  private windDebugLabels: Phaser.GameObjects.Text[] = [];
+  private poiDebugLabels: Phaser.GameObjects.Text[] = [];
+  private detailDebugLabels: Phaser.GameObjects.Text[] = [];
+  private debugPanel?: Phaser.GameObjects.Container;
+  private debugPanelBackground?: Phaser.GameObjects.Rectangle;
+  private debugPanelText?: Phaser.GameObjects.Text;
+  private generationDebugKey?: Phaser.Input.Keyboard.Key;
+  private freeCameraKey?: Phaser.Input.Keyboard.Key;
+  private generationGridKey?: Phaser.Input.Keyboard.Key;
+  private windDebugKey?: Phaser.Input.Keyboard.Key;
+  private poiDebugKey?: Phaser.Input.Keyboard.Key;
+  private detailDebugKey?: Phaser.Input.Keyboard.Key;
+  private freeCameraResetKey?: Phaser.Input.Keyboard.Key;
+  private freeCameraZoomInKey?: Phaser.Input.Keyboard.Key;
+  private freeCameraZoomOutKey?: Phaser.Input.Keyboard.Key;
+  private freeCameraPanKeys?: {
+    up: Phaser.Input.Keyboard.Key;
+    down: Phaser.Input.Keyboard.Key;
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+  };
+  private freeCameraCursorKeys?: Phaser.Types.Input.Keyboard.CursorKeys;
+  private debugPanelEnabled = false;
+  private freeCameraEnabled = false;
+  private generationGridDebugEnabled = false;
+  private windDebugEnabled = false;
+  private poiDebugEnabled = false;
+  private detailDebugEnabled = false;
   private windStreaks?: WindStreaks;
   private oceanTileSprite?: Phaser.GameObjects.TileSprite;
   private currentDockingPointId?: string;
@@ -241,6 +286,7 @@ export class GameScene extends Phaser.Scene {
     this.shipHullDebugGraphics = this.add.graphics()
       .setDepth(COLLISION_DEBUG_DEPTH + 1)
       .setVisible(false);
+    this.createGenerationDebugVisuals();
 
     const spawn = findOpenWaterSpawn(this.archipelago, SPAWN_CLEARANCE_TILES);
     this.playerShip = new Ship(
@@ -283,8 +329,27 @@ export class GameScene extends Phaser.Scene {
       .setDepth(5);
 
     this.controls = new KeyboardControls(this);
-    this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
-    this.collisionDebugKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.B);
+    const keyboard = this.input.keyboard;
+    this.escapeKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.collisionDebugKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.B);
+    this.generationDebugKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.G);
+    this.freeCameraKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+    this.generationGridKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ONE);
+    this.windDebugKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.TWO);
+    this.poiDebugKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.THREE);
+    this.detailDebugKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR);
+    this.freeCameraResetKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+    this.freeCameraZoomInKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.freeCameraZoomOutKey = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+    if (keyboard) {
+      this.freeCameraCursorKeys = keyboard.createCursorKeys();
+      this.freeCameraPanKeys = keyboard.addKeys({
+        up: Phaser.Input.Keyboard.KeyCodes.W,
+        down: Phaser.Input.Keyboard.KeyCodes.S,
+        left: Phaser.Input.Keyboard.KeyCodes.A,
+        right: Phaser.Input.Keyboard.KeyCodes.D,
+      }) as typeof this.freeCameraPanKeys;
+    }
     this.windStreaks = new WindStreaks(
       this,
       this.wind,
@@ -309,7 +374,7 @@ export class GameScene extends Phaser.Scene {
       backgroundColor: '#071b28cc',
       padding: { x: 8, y: 5 },
     }).setScrollFactor(0).setDepth(100);
-    this.add.text(16, 51, '[W/S] sails  [A/D] steer  [X] anchor  [B] hitboxes  [ESC] generation lab', {
+    this.add.text(16, 51, '[W/S] sails  [A/D] steer  [X] anchor  [B] hitboxes  [G] debug  [ESC] generation lab', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '11px',
@@ -323,6 +388,8 @@ export class GameScene extends Phaser.Scene {
       backgroundColor: '#071b28cc',
       padding: { x: 8, y: 4 },
     }).setScrollFactor(0).setDepth(100);
+    this.createGenerationDebugPanel();
+    this.updateGenerationDebugPanel();
   }
 
   update(time: number, delta: number) {
@@ -333,18 +400,52 @@ export class GameScene extends Phaser.Scene {
     if (gameHudStore.getSnapshot().mapOpen) {
       this.controls.reset();
       this.playerCombat?.update(false);
-      this.escapeKey?.reset();
-      this.collisionDebugKey?.reset();
+      this.resetDebugKeys();
       this.playerShip.setVelocity(0, 0);
       return;
     }
 
+    if (this.generationDebugKey && Phaser.Input.Keyboard.JustDown(this.generationDebugKey)) {
+      this.setGenerationDebugPanelEnabled(!this.debugPanelEnabled);
+    }
     if (this.escapeKey && Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
       this.scene.start('WorldGenerationScene', { seed: this.seed, build: this.build });
       return;
     }
     if (this.collisionDebugKey && Phaser.Input.Keyboard.JustDown(this.collisionDebugKey)) {
       this.setCollisionDebugEnabled(!this.collisionDebugEnabled);
+    }
+    if (this.freeCameraKey && Phaser.Input.Keyboard.JustDown(this.freeCameraKey)) {
+      this.setFreeCameraEnabled(!this.freeCameraEnabled);
+    }
+    if (this.generationGridKey && Phaser.Input.Keyboard.JustDown(this.generationGridKey)) {
+      this.generationGridDebugEnabled = !this.generationGridDebugEnabled;
+      this.syncGenerationDebugVisibility();
+    }
+    if (this.windDebugKey && Phaser.Input.Keyboard.JustDown(this.windDebugKey)) {
+      this.windDebugEnabled = !this.windDebugEnabled;
+      this.syncGenerationDebugVisibility();
+    }
+    if (this.poiDebugKey && Phaser.Input.Keyboard.JustDown(this.poiDebugKey)) {
+      this.poiDebugEnabled = !this.poiDebugEnabled;
+      this.syncGenerationDebugVisibility();
+    }
+    if (this.detailDebugKey && Phaser.Input.Keyboard.JustDown(this.detailDebugKey)) {
+      this.detailDebugEnabled = !this.detailDebugEnabled;
+      this.syncGenerationDebugVisibility();
+    }
+    if (this.freeCameraEnabled) {
+      if (this.freeCameraResetKey && Phaser.Input.Keyboard.JustDown(this.freeCameraResetKey)) {
+        this.resetFreeCameraPosition();
+      }
+      this.updateFreeCamera(delta);
+      this.playerShip.setVelocity(0, 0);
+      this.playerCombat?.update(false);
+      this.drawTerrainCollisionDebug();
+      this.drawShipHullDebug();
+      this.syncOceanToCamera();
+      this.updateGenerationDebugPanel();
+      return;
     }
     if (this.controls.isSailUpJustPressed()) this.playerShip.raiseSail();
     if (this.controls.isSailDownJustPressed()) this.playerShip.lowerSail();
@@ -362,6 +463,7 @@ export class GameScene extends Phaser.Scene {
     this.drawShipHullDebug();
     this.windStreaks?.update();
     this.syncOceanToCamera();
+    this.updateGenerationDebugPanel();
   }
 
   private syncOceanToCamera() {
@@ -372,6 +474,386 @@ export class GameScene extends Phaser.Scene {
 
     const worldView = this.cameras.main.worldView;
     ocean.setTilePosition(worldView.left, worldView.top);
+  }
+
+  private createGenerationDebugVisuals() {
+    if (!this.archipelago) {
+      return;
+    }
+
+    this.generationGridDebugGraphics = this.add.graphics()
+      .setDepth(GENERATION_DEBUG_DEPTH)
+      .setVisible(this.generationGridDebugEnabled);
+    this.windDebugGraphics = this.add.graphics()
+      .setDepth(GENERATION_DEBUG_DEPTH)
+      .setVisible(this.windDebugEnabled);
+    this.poiDebugGraphics = this.add.graphics()
+      .setDepth(GENERATION_DEBUG_DEPTH)
+      .setVisible(this.poiDebugEnabled);
+    this.detailDebugGraphics = this.add.graphics()
+      .setDepth(GENERATION_DEBUG_DEPTH)
+      .setVisible(this.detailDebugEnabled);
+
+    this.drawGenerationGridDebug();
+    this.drawWindDebug();
+    this.drawPoiDebug();
+    this.drawGenerationDetailsDebug();
+    this.syncGenerationDebugVisibility();
+  }
+
+  private drawGenerationGridDebug() {
+    const graphics = this.generationGridDebugGraphics;
+    if (!graphics || !this.archipelago) {
+      return;
+    }
+
+    graphics.lineStyle(1, 0x93c5fd, 0.38);
+    for (let y = 0; y < this.archipelago.height; y += 1) {
+      for (let x = 0; x < this.archipelago.width; x += 1) {
+        if (!this.archipelago.landMask[y * this.archipelago.width + x]) {
+          continue;
+        }
+        graphics.strokeRect(
+          x * TERRAIN_TILE_SIZE,
+          y * TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+        );
+      }
+    }
+  }
+
+  private drawWindDebug() {
+    const graphics = this.windDebugGraphics;
+    if (!graphics || !this.archipelago) {
+      return;
+    }
+
+    this.archipelago.wind.loops.forEach((loop) => {
+      if (loop.points.length < 2) {
+        return;
+      }
+
+      // Runtime sampling measures distance to each loop segment. Render the
+      // same corridor as thick translucent segment capsules so the debug view
+      // does not imply that wind exists only around its waypoint anchors.
+      const corridorRadius = loop.corridorRadius * TERRAIN_TILE_SIZE;
+      graphics.lineStyle(corridorRadius * 2, 0xfef08a, 0.12);
+      graphics.fillStyle(0xfef08a, 0.12);
+      loop.points.forEach((point, index) => {
+        const next = loop.points[(index + 1) % loop.points.length];
+        const startX = point.x * TERRAIN_TILE_SIZE;
+        const startY = point.y * TERRAIN_TILE_SIZE;
+        const endX = next.x * TERRAIN_TILE_SIZE;
+        const endY = next.y * TERRAIN_TILE_SIZE;
+        graphics.lineBetween(startX, startY, endX, endY);
+        graphics.fillCircle(startX, startY, corridorRadius);
+      });
+
+      graphics.lineStyle(3, 0xfef08a, 0.8);
+      graphics.fillStyle(0xfef08a, 0.9);
+      loop.points.forEach((point, index) => {
+        const next = loop.points[(index + 1) % loop.points.length];
+        const startX = point.x * TERRAIN_TILE_SIZE;
+        const startY = point.y * TERRAIN_TILE_SIZE;
+        const endX = next.x * TERRAIN_TILE_SIZE;
+        const endY = next.y * TERRAIN_TILE_SIZE;
+        graphics.lineBetween(startX, startY, endX, endY);
+
+        const midpointX = (startX + endX) / 2;
+        const midpointY = (startY + endY) / 2;
+        const direction = Math.atan2(endY - startY, endX - startX);
+        const arrowX = midpointX + Math.cos(direction) * 28;
+        const arrowY = midpointY + Math.sin(direction) * 28;
+        graphics.lineBetween(midpointX, midpointY, arrowX, arrowY);
+        graphics.lineBetween(
+          arrowX,
+          arrowY,
+          arrowX - Math.cos(direction - 0.55) * 10,
+          arrowY - Math.sin(direction - 0.55) * 10,
+        );
+        graphics.lineBetween(
+          arrowX,
+          arrowY,
+          arrowX - Math.cos(direction + 0.55) * 10,
+          arrowY - Math.sin(direction + 0.55) * 10,
+        );
+      });
+      loop.points.forEach((point, pointIndex) => {
+        const next = loop.points[(pointIndex + 1) % loop.points.length];
+        const direction = Math.atan2(next.y - point.y, next.x - point.x);
+        graphics.fillCircle(
+          point.x * TERRAIN_TILE_SIZE,
+          point.y * TERRAIN_TILE_SIZE,
+          7,
+        );
+        const label = this.add.text(
+          point.x * TERRAIN_TILE_SIZE + 10,
+          point.y * TERRAIN_TILE_SIZE - 18,
+          `${loop.id}  ${Math.round(loop.strength * 100)}%  dir ${direction.toFixed(2)}`,
+          {
+            color: '#fef08a',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            backgroundColor: '#422006cc',
+            padding: { x: 3, y: 2 },
+          },
+        ).setDepth(GENERATION_DEBUG_DEPTH + 1);
+        this.windDebugLabels.push(label);
+      });
+    });
+  }
+
+  private drawPoiDebug() {
+    const graphics = this.poiDebugGraphics;
+    if (!graphics || !this.archipelago) {
+      return;
+    }
+
+    this.archipelago.pointsOfInterest.forEach((point) => {
+      const color = point.environment === 'land'
+        ? DEBUG_DETAIL_COLORS.landPoi
+        : DEBUG_DETAIL_COLORS.waterPoi;
+      graphics.fillStyle(color, 0.24);
+      point.occupiedCells.forEach((cell) => {
+        graphics.fillRect(
+          cell.x * TERRAIN_TILE_SIZE,
+          cell.y * TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+        );
+      });
+      graphics.lineStyle(2, color, 0.9);
+      graphics.strokeCircle(
+        (point.x + 0.5) * TERRAIN_TILE_SIZE,
+        (point.y + 0.5) * TERRAIN_TILE_SIZE,
+        point.size === 'big' ? 16 : point.size === 'medium' ? 11 : 7,
+      );
+      const label = this.add.text(
+        (point.x + 0.5) * TERRAIN_TILE_SIZE + 9,
+        (point.y + 0.5) * TERRAIN_TILE_SIZE + 8,
+        `${point.id} ${point.kind}`,
+        {
+          color: point.environment === 'land' ? '#fbbf24' : '#60a5fa',
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          backgroundColor: '#020617cc',
+          padding: { x: 3, y: 2 },
+        },
+      ).setDepth(GENERATION_DEBUG_DEPTH + 1);
+      this.poiDebugLabels.push(label);
+    });
+  }
+
+  private drawGenerationDetailsDebug() {
+    const graphics = this.detailDebugGraphics;
+    if (!graphics || !this.archipelago) {
+      return;
+    }
+
+    graphics.lineStyle(2, DEBUG_DETAIL_COLORS.settlement, 0.85);
+    this.archipelago.settlementModules.forEach((module) => {
+      module.occupiedCells.forEach((cell) => {
+        graphics.strokeRect(
+          cell.x * TERRAIN_TILE_SIZE + 4,
+          cell.y * TERRAIN_TILE_SIZE + 4,
+          TERRAIN_TILE_SIZE - 8,
+          TERRAIN_TILE_SIZE - 8,
+        );
+      });
+    });
+    graphics.lineStyle(2, DEBUG_DETAIL_COLORS.natural, 0.85);
+    this.archipelago.naturalFeatures.forEach((feature) => {
+      feature.occupiedCells.forEach((cell) => {
+        graphics.strokeCircle(
+          (cell.x + 0.5) * TERRAIN_TILE_SIZE,
+          (cell.y + 0.5) * TERRAIN_TILE_SIZE,
+          9,
+        );
+      });
+    });
+
+    const moduleLabel = this.add.text(
+      8,
+      8,
+      `modules ${this.archipelago.settlementModules.length}  natural ${this.archipelago.naturalFeatures.length}`,
+      {
+        color: '#86efac',
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        backgroundColor: '#052e16cc',
+        padding: { x: 4, y: 3 },
+      },
+    ).setDepth(GENERATION_DEBUG_DEPTH + 1);
+    this.detailDebugLabels.push(moduleLabel);
+  }
+
+  private syncGenerationDebugVisibility() {
+    this.generationGridDebugGraphics?.setVisible(this.generationGridDebugEnabled);
+    this.windDebugGraphics?.setVisible(this.windDebugEnabled);
+    this.poiDebugGraphics?.setVisible(this.poiDebugEnabled);
+    this.detailDebugGraphics?.setVisible(this.detailDebugEnabled);
+    this.windDebugLabels.forEach((label) => label.setVisible(this.windDebugEnabled));
+    this.poiDebugLabels.forEach((label) => label.setVisible(this.poiDebugEnabled));
+    this.detailDebugLabels.forEach((label) => label.setVisible(this.detailDebugEnabled));
+    this.updateGenerationDebugPanel();
+  }
+
+  private createGenerationDebugPanel() {
+    const background = this.add.rectangle(0, 0, DEBUG_PANEL_WIDTH, DEBUG_PANEL_HEIGHT, 0x020617, 0.94)
+      .setOrigin(0)
+      .setStrokeStyle(2, 0x38bdf8, 0.85);
+    this.debugPanelBackground = background;
+    this.debugPanelText = this.add.text(0, 0, '', {
+      color: '#dbeafe',
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      lineSpacing: 4,
+      padding: { x: 12, y: 10 },
+    });
+    this.debugPanel = this.add.container(0, 0, [background, this.debugPanelText])
+      .setScrollFactor(0)
+      .setDepth(120)
+      .setVisible(false);
+    this.resizeDebugPanel();
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.resizeDebugPanel, this);
+  }
+
+  private resizeDebugPanel() {
+    const panelX = Math.max(
+      DEBUG_PANEL_MARGIN,
+      this.scale.width - DEBUG_PANEL_WIDTH - DEBUG_PANEL_MARGIN,
+    );
+    this.debugPanelBackground?.setPosition(panelX, DEBUG_PANEL_MARGIN);
+    this.debugPanelText?.setPosition(panelX, DEBUG_PANEL_MARGIN);
+  }
+
+  private setGenerationDebugPanelEnabled(enabled: boolean) {
+    this.debugPanelEnabled = enabled;
+    this.debugPanel?.setVisible(enabled);
+    this.updateGenerationDebugPanel();
+  }
+
+  private updateGenerationDebugPanel() {
+    if (!this.debugPanelText || !this.archipelago) {
+      return;
+    }
+    const landPointCount = this.archipelago.pointsOfInterest
+      .filter((point) => point.environment === 'land').length;
+    const waterPointCount = this.archipelago.pointsOfInterest.length - landPointCount;
+    const camera = this.cameras.main;
+    this.debugPanelText.setText([
+      'GENERATION DEBUG',
+      `MAP ${this.archipelago.width}x${this.archipelago.height}  CELLS ${this.archipelago.width * this.archipelago.height}`,
+      `ISLANDS ${getGeneratedIslandCount(this.archipelago)}  LAND ${landPointCount}  WATER ${waterPointCount}`,
+      `MODULES ${this.archipelago.settlementModules.length}  NATURAL ${this.archipelago.naturalFeatures.length}`,
+      `WIND LOOPS ${this.archipelago.wind.loops.length}  AMBIENT ${this.archipelago.wind.ambientDirectionRad.toFixed(2)}rad`,
+      '',
+      `B hitboxes       ${this.collisionDebugEnabled ? 'ON' : 'OFF'}`,
+      `F free camera    ${this.freeCameraEnabled ? 'ON' : 'OFF'}`,
+      `1 terrain grid   ${this.generationGridDebugEnabled ? 'ON' : 'OFF'}`,
+      `2 wind corridors ${this.windDebugEnabled ? 'ON' : 'OFF'}`,
+      `3 POI cells      ${this.poiDebugEnabled ? 'ON' : 'OFF'}`,
+      `4 world details  ${this.detailDebugEnabled ? 'ON' : 'OFF'}`,
+      '',
+      `CAM ${Math.round(camera.scrollX)},${Math.round(camera.scrollY)}  ZOOM ${camera.zoom.toFixed(2)}`,
+      'G panel  F free view  R reset camera',
+      'WASD/arrows pan  Q/E zoom',
+    ]);
+  }
+
+  private setFreeCameraEnabled(enabled: boolean) {
+    if (!this.playerShip) {
+      return;
+    }
+    this.freeCameraEnabled = enabled;
+    const camera = this.cameras.main;
+    this.playerShip.setVelocity(0, 0);
+    if (enabled) {
+      camera.stopFollow();
+      this.resetFreeCameraPosition();
+    } else {
+      camera.setZoom(1);
+      camera.startFollow(this.playerShip, true, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
+      this.controls?.reset();
+    }
+    this.updateGenerationDebugPanel();
+  }
+
+  private updateFreeCamera(delta: number) {
+    const keys = this.freeCameraPanKeys;
+    if (!keys || !this.archipelago) {
+      return;
+    }
+    const cursors = this.freeCameraCursorKeys;
+    const horizontal = Number(keys.right.isDown || cursors?.right.isDown)
+      - Number(keys.left.isDown || cursors?.left.isDown);
+    const vertical = Number(keys.down.isDown || cursors?.down.isDown)
+      - Number(keys.up.isDown || cursors?.up.isDown);
+    const speed = FREE_CAMERA_SPEED * Math.min(delta, 50) / 1000 / this.cameras.main.zoom;
+    this.setFreeCameraScroll(
+      this.cameras.main.scrollX + horizontal * speed,
+      this.cameras.main.scrollY + vertical * speed,
+    );
+    if (this.freeCameraZoomOutKey?.isDown) {
+      this.cameras.main.setZoom(Phaser.Math.Clamp(
+        this.cameras.main.zoom - 0.015,
+        FREE_CAMERA_MIN_ZOOM,
+        FREE_CAMERA_MAX_ZOOM,
+      ));
+    }
+    if (this.freeCameraZoomInKey?.isDown) {
+      this.cameras.main.setZoom(Phaser.Math.Clamp(
+        this.cameras.main.zoom + 0.015,
+        FREE_CAMERA_MIN_ZOOM,
+        FREE_CAMERA_MAX_ZOOM,
+      ));
+    }
+  }
+
+  private resetFreeCameraPosition() {
+    if (!this.playerShip) {
+      return;
+    }
+    const camera = this.cameras.main;
+    this.setFreeCameraScroll(
+      this.playerShip.x - camera.width / camera.zoom / 2,
+      this.playerShip.y - camera.height / camera.zoom / 2,
+    );
+  }
+
+  private setFreeCameraScroll(scrollX: number, scrollY: number) {
+    if (!this.archipelago) {
+      return;
+    }
+    const camera = this.cameras.main;
+    const worldWidth = this.archipelago.width * TERRAIN_TILE_SIZE;
+    const worldHeight = this.archipelago.height * TERRAIN_TILE_SIZE;
+    const maxScrollX = Math.max(0, worldWidth - camera.width / camera.zoom);
+    const maxScrollY = Math.max(0, worldHeight - camera.height / camera.zoom);
+    camera.setScroll(
+      Phaser.Math.Clamp(scrollX, 0, maxScrollX),
+      Phaser.Math.Clamp(scrollY, 0, maxScrollY),
+    );
+  }
+
+  private resetDebugKeys() {
+    this.escapeKey?.reset();
+    this.collisionDebugKey?.reset();
+    this.generationDebugKey?.reset();
+    this.freeCameraKey?.reset();
+    this.generationGridKey?.reset();
+    this.windDebugKey?.reset();
+    this.poiDebugKey?.reset();
+    this.detailDebugKey?.reset();
+    this.freeCameraResetKey?.reset();
+    this.freeCameraZoomInKey?.reset();
+    this.freeCameraZoomOutKey?.reset();
+    Object.values(this.freeCameraPanKeys ?? {}).forEach((key) => key.reset());
+    this.freeCameraCursorKeys?.up.reset();
+    this.freeCameraCursorKeys?.down.reset();
+    this.freeCameraCursorKeys?.left.reset();
+    this.freeCameraCursorKeys?.right.reset();
   }
 
   private createWorldDecorationVisuals() {
@@ -698,7 +1180,21 @@ export class GameScene extends Phaser.Scene {
 
   private handleShutdown() {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.resizeOceanToCamera, this);
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.resizeDebugPanel, this);
     hideGameHud();
+    this.cameras.main.stopFollow().setZoom(1);
+    this.freeCameraEnabled = false;
+    this.debugPanelEnabled = false;
+    this.generationGridDebugGraphics?.clear();
+    this.windDebugGraphics?.clear();
+    this.poiDebugGraphics?.clear();
+    this.detailDebugGraphics?.clear();
+    this.windDebugLabels.forEach((label) => label.destroy());
+    this.poiDebugLabels.forEach((label) => label.destroy());
+    this.detailDebugLabels.forEach((label) => label.destroy());
+    this.windDebugLabels = [];
+    this.poiDebugLabels = [];
+    this.detailDebugLabels = [];
     this.playerCombat?.destroy();
     this.playerShip?.off(
       SHIP_CREW_DEFEATED_EVENT,
@@ -721,6 +1217,25 @@ export class GameScene extends Phaser.Scene {
     this.collisionDebugGraphics = undefined;
     this.shipHullDebugGraphics = undefined;
     this.collisionDebugStatus = undefined;
+    this.generationGridDebugGraphics = undefined;
+    this.windDebugGraphics = undefined;
+    this.poiDebugGraphics = undefined;
+    this.detailDebugGraphics = undefined;
+    this.debugPanel?.destroy();
+    this.debugPanel = undefined;
+    this.debugPanelBackground = undefined;
+    this.debugPanelText = undefined;
+    this.generationDebugKey = undefined;
+    this.freeCameraKey = undefined;
+    this.generationGridKey = undefined;
+    this.windDebugKey = undefined;
+    this.poiDebugKey = undefined;
+    this.detailDebugKey = undefined;
+    this.freeCameraResetKey = undefined;
+    this.freeCameraZoomInKey = undefined;
+    this.freeCameraZoomOutKey = undefined;
+    this.freeCameraPanKeys = undefined;
+    this.freeCameraCursorKeys = undefined;
     this.windStreaks = undefined;
     this.oceanTileSprite = undefined;
     if (this.textures.exists(BLOB_TERRAIN_TEXTURE_KEY)) {
@@ -754,6 +1269,10 @@ function createMinimapWorldSnapshot(
     landMask: Object.freeze([...archipelago.landMask]),
     pointsOfInterest: Object.freeze(pointsOfInterest),
   });
+}
+
+function getGeneratedIslandCount(archipelago: GeneratedArchipelago) {
+  return new Set(archipelago.islandIds.filter((islandId) => islandId !== 0)).size;
 }
 
 type TileBounds = Readonly<{

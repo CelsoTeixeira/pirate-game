@@ -16,6 +16,21 @@ function assert(condition: unknown, message: string) {
 
 const first = generateArchipelago(0x51a7d, DEFAULT_ARCHIPELAGO_CONFIG);
 const second = generateArchipelago(0x51a7d, DEFAULT_ARCHIPELAGO_CONFIG);
+assert(DEFAULT_ARCHIPELAGO_CONFIG.width === 64, 'default generation width must be 64 cells');
+assert(DEFAULT_ARCHIPELAGO_CONFIG.height === 64, 'default generation height must be 64 cells');
+assert(first.islandCompositions.length === 56, '64x64 generation must place 56 islands');
+assert(
+  first.pointsOfInterest.filter((point) => point.environment === 'land').length === 24,
+  'generation must retain 24 land points of interest',
+);
+assert(
+  first.pointsOfInterest.filter((point) => point.environment === 'water').length === 12,
+  'generation must retain 12 water points of interest',
+);
+assert(
+  JSON.stringify(first) === JSON.stringify(second),
+  'the same archipelago seed must generate the same world decorations',
+);
 assert(
   JSON.stringify(first.wind) === JSON.stringify(second.wind),
   'the same archipelago seed must generate the same wind loops',
@@ -64,6 +79,20 @@ const inside = sampleGeneratedWind(syntheticWind, 4, 6, 1);
 assert(inside.strength > 0 && inside.strength < 0.9, 'corridor interior must smoothly rise above zero');
 const centerline = sampleGeneratedWind(syntheticWind, 4, 4, 1);
 assert(centerline.strength === 0.9, 'corridor centerline must return full loop strength');
+
+for (let seed = 0; seed < 1000; seed += 1) {
+  const world = generateArchipelago(seed, DEFAULT_ARCHIPELAGO_CONFIG);
+  assert(world.islandCompositions.length === 56, `seed ${seed} must place all 56 islands`);
+  assert(world.pointsOfInterest.length === 36, `seed ${seed} must place all 36 points of interest`);
+  assert(
+    world.pointsOfInterest.filter((point) => point.environment === 'land').length === 24,
+    `seed ${seed} must place 24 land points of interest`,
+  );
+  assert(
+    world.pointsOfInterest.filter((point) => point.environment === 'water').length === 12,
+    `seed ${seed} must place 12 water points of interest`,
+  );
+}
 
 function assertSample(sample: GeneratedWindSample, label: string) {
   assert(Number.isFinite(sample.directionRad), `${label} direction must be finite`);

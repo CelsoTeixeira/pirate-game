@@ -315,6 +315,9 @@ export class WorldGenerationScene extends Phaser.Scene {
   }
 
   private refreshStatus() {
+    const islandCount = this.heightMap
+      ? new Set(this.heightMap.islandIds.filter((islandId) => islandId !== 0)).size
+      : 0;
     const landPointCount = this.heightMap?.pointsOfInterest
       .filter((point) => point.environment === 'land')
       .length ?? 0;
@@ -322,7 +325,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       ? this.heightMap.pointsOfInterest.length - landPointCount
       : 0;
     this.statusText?.setText(
-      `seed ${this.seed}  |  islands 400  |  land ${landPointCount}  |  water ${waterPointCount}`
+      `seed ${this.seed}  |  islands ${islandCount}  |  land ${landPointCount}  |  water ${waterPointCount}`
         + `  |  modules ${this.heightMap?.settlementModules.length ?? 0}`
         + `  |  natural ${this.heightMap?.naturalFeatures.length ?? 0}`
         + `  |  wind loops ${this.heightMap?.wind.loops.length ?? 0}`

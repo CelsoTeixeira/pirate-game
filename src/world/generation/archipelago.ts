@@ -27,13 +27,15 @@ export type GeneratedArchipelago = Readonly<{
 }>;
 
 export const DEFAULT_ARCHIPELAGO_CONFIG: ArchipelagoGenerationConfig = Object.freeze({
-  width: 256,
-  height: 256,
+  width: 64,
+  height: 64,
 });
 
-const MINI_ISLAND_COUNT = 300;
-const MEDIUM_ISLAND_COUNT = 80;
-const LARGE_ISLAND_COUNT = 20;
+// The compact map keeps a useful mix of island sizes while leaving enough
+// open water for the twelve encounter footprints and their clearance rings.
+const MINI_ISLAND_COUNT = 40;
+const MEDIUM_ISLAND_COUNT = 12;
+const LARGE_ISLAND_COUNT = 4;
 const TOTAL_ISLAND_COUNT = MINI_ISLAND_COUNT + MEDIUM_ISLAND_COUNT + LARGE_ISLAND_COUNT;
 const LARGE_ISLAND_SIZE = 14;
 const MAP_EDGE_MARGIN = 2;
