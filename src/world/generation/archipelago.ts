@@ -4,7 +4,8 @@ import {
   type GeneratedNaturalFeature,
   type GeneratedPointOfInterest,
   type GeneratedSettlementModule,
-} from './pointsOfInterest';
+} from './pointsOfInterest.ts';
+import { generateWind, type GeneratedWind } from './wind.ts';
 
 export type ArchipelagoGenerationConfig = Readonly<{
   width: number;
@@ -22,6 +23,7 @@ export type GeneratedArchipelago = Readonly<{
   islandCompositions: ReadonlyArray<GeneratedIslandComposition>;
   settlementModules: ReadonlyArray<GeneratedSettlementModule>;
   naturalFeatures: ReadonlyArray<GeneratedNaturalFeature>;
+  wind: GeneratedWind;
 }>;
 
 export const DEFAULT_ARCHIPELAGO_CONFIG: ArchipelagoGenerationConfig = Object.freeze({
@@ -73,6 +75,12 @@ export function generateArchipelago(
     config.height,
     islandIds,
   );
+  const wind = generateWind(
+    normalizedSeed,
+    config.width,
+    config.height,
+    worldDecorations.pointsOfInterest.filter((point) => point.environment === 'water'),
+  );
 
   return Object.freeze({
     seed: normalizedSeed,
@@ -85,6 +93,7 @@ export function generateArchipelago(
     islandCompositions: worldDecorations.islandCompositions,
     settlementModules: worldDecorations.settlementModules,
     naturalFeatures: worldDecorations.naturalFeatures,
+    wind,
   });
 }
 

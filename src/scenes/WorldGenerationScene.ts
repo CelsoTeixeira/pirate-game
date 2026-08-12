@@ -13,6 +13,7 @@ import type {
   PoiSize,
   SettlementModuleKind,
 } from '../world/generation/pointsOfInterest';
+import type { GeneratedWind } from '../world/generation/wind';
 
 const TERRAIN_ATLAS_KEY = 'terrain-atlas-64';
 const TERRAIN_ATLAS_PATH = 'assets/terrain/terrain-atlas-64.png';
@@ -301,6 +302,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       this.terrainTexture.context,
       this.heightMap.naturalFeatures,
     );
+    this.drawWindLoops(this.terrainTexture.context, this.heightMap.wind);
     this.drawSettlementModuleMarkers(
       this.terrainTexture.context,
       this.heightMap.settlementModules,
@@ -323,8 +325,37 @@ export class WorldGenerationScene extends Phaser.Scene {
       `seed ${this.seed}  |  islands 400  |  land ${landPointCount}  |  water ${waterPointCount}`
         + `  |  modules ${this.heightMap?.settlementModules.length ?? 0}`
         + `  |  natural ${this.heightMap?.naturalFeatures.length ?? 0}`
+        + `  |  wind loops ${this.heightMap?.wind.loops.length ?? 0}`
         + `  |  ${DEFAULT_ARCHIPELAGO_CONFIG.width}x${DEFAULT_ARCHIPELAGO_CONFIG.height}`,
     );
+  }
+
+  private drawWindLoops(context: CanvasRenderingContext2D, wind: GeneratedWind) {
+    context.save();
+    context.strokeStyle = '#fef08a';
+    context.fillStyle = '#fef08a';
+    context.lineWidth = 1.5;
+    context.setLineDash([3, 2]);
+
+    wind.loops.forEach((loop) => {
+      if (loop.points.length < 2) {
+        return;
+      }
+      context.beginPath();
+      loop.points.forEach((point, index) => {
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      });
+      context.closePath();
+      context.stroke();
+      loop.points.forEach((point) => {
+        context.beginPath();
+        context.arc(point.x, point.y, 2, 0, Math.PI * 2);
+        context.fill();
+      });
+    });
+
+    context.restore();
   }
 
   private drawPointOfInterestMarkers(

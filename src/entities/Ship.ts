@@ -6,7 +6,7 @@ import {
   preloadResourceLossEffectTextures,
 } from '../effects/effects';
 import shipTypes from './ship-types.json';
-import { Wind } from '../world/Wind';
+import type { WindSample } from '../world/Wind';
 import {
   applyDamageResourceConsequence,
   consumeSuppliesForDistance,
@@ -244,7 +244,7 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
     this.anchored = !this.anchored;
   }
 
-  sail(wind: Wind, rudder: RudderDirection, deltaMs: number) {
+  sail(wind: WindSample, rudder: RudderDirection, deltaMs: number) {
     if (this.isDestroyed) {
       this.setVelocity(0, 0);
       return;

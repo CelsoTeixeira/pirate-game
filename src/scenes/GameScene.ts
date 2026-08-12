@@ -18,6 +18,7 @@ import {
   type MinimapWorldSnapshot,
 } from '../ui/gameHudStore';
 import { Wind } from '../world/Wind';
+import { sampleGeneratedWind } from '../world/generation/wind';
 import {
   DEFAULT_ARCHIPELAGO_CONFIG,
   generateArchipelago,
@@ -143,7 +144,7 @@ export class GameScene extends Phaser.Scene {
   private currentDockingPointId?: string;
   private lastMinimapPosePublishedAt = 0;
   private lastMinimapPlayerPose?: MinimapPlayerPose;
-  private readonly wind = new Wind(0, 0.7);
+  private readonly wind = new Wind(0, 0);
 
   constructor() {
     super('GameScene');
@@ -284,7 +285,14 @@ export class GameScene extends Phaser.Scene {
     this.controls = new KeyboardControls(this);
     this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.collisionDebugKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.B);
-    this.windStreaks = new WindStreaks(this, this.wind);
+    this.windStreaks = new WindStreaks(
+      this,
+      this.wind,
+      () => ({
+        x: this.playerShip?.x ?? 0,
+        y: this.playerShip?.y ?? 0,
+      }),
+    );
     this.syncShipVisual();
     this.cameras.main.startFollow(
       this.playerShip,
@@ -424,6 +432,15 @@ export class GameScene extends Phaser.Scene {
     if (!this.playerShip || !this.archipelago || !this.build) {
       return;
     }
+
+    const generatedWind = sampleGeneratedWind(
+      this.archipelago.wind,
+      this.playerShip.x,
+      this.playerShip.y,
+      TERRAIN_TILE_SIZE,
+    );
+    this.wind.directionRad = generatedWind.directionRad;
+    this.wind.strength = generatedWind.strength;
 
     const previousPose = this.getPlayerHullPose();
     const footprint = SHIP_HULL_FOOTPRINTS[this.build.size];

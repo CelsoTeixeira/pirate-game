@@ -10,24 +10,38 @@ const WIND_STREAK_INITIAL_FREQUENCY_MS = 250;
 const WIND_STREAK_MIN_COUNT = 18;
 const WIND_STREAK_MAX_COUNT = 42;
 const WIND_STREAK_PEAK_ALPHA = 0.6;
+const WIND_STREAK_LOCAL_WIDTH = 720;
+const WIND_STREAK_LOCAL_HEIGHT = 480;
 
 type Bounds = {
   width: number;
   height: number;
 };
 
+type Position = {
+  x: number;
+  y: number;
+};
+
 export class WindStreaks {
   private readonly scene: Phaser.Scene;
   private readonly wind: Wind;
+  private readonly getPosition: () => Position;
   private readonly emitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private lastDirectionRad = Number.NaN;
   private lastStrength = Number.NaN;
   private lastWidth = 0;
   private lastHeight = 0;
 
-  constructor(scene: Phaser.Scene, wind: Wind, bounds: Bounds = scene.scale.gameSize) {
+  constructor(
+    scene: Phaser.Scene,
+    wind: Wind,
+    getPosition: () => Position,
+    bounds: Bounds = { width: WIND_STREAK_LOCAL_WIDTH, height: WIND_STREAK_LOCAL_HEIGHT },
+  ) {
     this.scene = scene;
     this.wind = wind;
+    this.getPosition = getPosition;
     this.lastWidth = bounds.width;
     this.lastHeight = bounds.height;
 
@@ -56,7 +70,8 @@ export class WindStreaks {
   }
 
   sync(force = false) {
-    const { width, height } = this.scene.scale.gameSize;
+    const width = this.lastWidth;
+    const height = this.lastHeight;
     const directionRad = this.wind.directionRad;
     const strength = this.wind.strength;
 
@@ -85,6 +100,10 @@ export class WindStreaks {
       emitZone: this.createEmitZone(directionRad),
     });
     this.emitter.setDepth(WIND_STREAK_DEPTH);
+    if (strength === 0) {
+      this.emitter.killAll();
+    }
+    this.emitter.emitting = strength > 0;
 
     this.lastDirectionRad = directionRad;
     this.lastStrength = strength;
@@ -106,24 +125,29 @@ export class WindStreaks {
     const directionX = Math.cos(directionRad);
     const directionY = Math.sin(directionRad);
     const horizontal = Math.abs(directionX) >= Math.abs(directionY);
-    const camera = this.scene.cameras.main;
+    const getPosition = this.getPosition;
+    const streaks = this;
 
     return {
       type: 'random',
       source: {
         getRandomPoint(point) {
-          const view = camera.worldView;
+          const position = getPosition();
+          const left = position.x - streaks.lastWidth / 2;
+          const right = position.x + streaks.lastWidth / 2;
+          const top = position.y - streaks.lastHeight / 2;
+          const bottom = position.y + streaks.lastHeight / 2;
 
           if (horizontal) {
             point.x = directionX >= 0
-              ? view.left - WIND_STREAK_PADDING
-              : view.right + WIND_STREAK_PADDING;
-            point.y = Phaser.Math.FloatBetween(view.top, view.bottom);
+              ? left - WIND_STREAK_PADDING
+              : right + WIND_STREAK_PADDING;
+            point.y = Phaser.Math.FloatBetween(top, bottom);
           } else {
-            point.x = Phaser.Math.FloatBetween(view.left, view.right);
+            point.x = Phaser.Math.FloatBetween(left, right);
             point.y = directionY >= 0
-              ? view.top - WIND_STREAK_PADDING
-              : view.bottom + WIND_STREAK_PADDING;
+              ? top - WIND_STREAK_PADDING
+              : bottom + WIND_STREAK_PADDING;
           }
         },
       },

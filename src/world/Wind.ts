@@ -1,5 +1,10 @@
 import Phaser from 'phaser';
 
+export type WindSample = Readonly<{
+  directionRad: number;
+  strength: number;
+}>;
+
 export class Wind {
   public directionRad: number;
   public strength: number;
