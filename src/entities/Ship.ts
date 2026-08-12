@@ -45,6 +45,7 @@ export type ShipTypeDefinition = {
 };
 
 export type ShipTypeKey = keyof typeof shipTypes;
+export type ShipDamageState = 'pristine' | 'half-damage' | 'full-damage' | 'destroyed';
 
 type CannonArc = {
   centerAngle: number;
@@ -141,6 +142,10 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
 
   get isDestroyed() {
     return this.hp <= 0;
+  }
+
+  get damageState(): ShipDamageState {
+    return this.getCurrentDamageState();
   }
 
   get heading() {
@@ -325,24 +330,31 @@ export class Ship extends Phaser.Physics.Arcade.Sprite {
   }
 
   private getCurrentTextureKey() {
+    const damageState = this.getCurrentDamageState();
+    return damageState === 'pristine'
+      ? this.textureBase
+      : this.getDamageTextureKey(damageState);
+  }
+
+  private getCurrentDamageState(): ShipDamageState {
     const hpRatio = this.hp / this.maxHp;
 
     if (hpRatio > 2 / 3) {
-      return this.textureBase;
+      return 'pristine';
     }
 
     if (hpRatio > 1 / 3) {
-      return this.getDamageTextureKey('half-damage');
+      return 'half-damage';
     }
 
     if (hpRatio > 0) {
-      return this.getDamageTextureKey('full-damage');
+      return 'full-damage';
     }
 
-    return this.getDamageTextureKey('destroyed');
+    return 'destroyed';
   }
 
-  private getDamageTextureKey(damageState: 'half-damage' | 'full-damage' | 'destroyed') {
+  private getDamageTextureKey(damageState: Exclude<ShipDamageState, 'pristine'>) {
     return `${this.textureBase}-${damageState}`;
   }
 

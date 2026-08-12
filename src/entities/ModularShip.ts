@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { ShipDamageState } from './Ship';
 
 export type ModularShipSize = 'small' | 'medium' | 'big';
 export type ModularShipSailState = 'closed' | 'partial' | 'open';
@@ -38,6 +39,12 @@ const SHIP_PARTS_PATH = 'assets/ship-parts';
 const MODULAR_SHIP_CANNON_TEXTURE_KEY = 'modular-ship-cannon';
 const SHIP_SIZES: readonly ModularShipSize[] = ['small', 'medium', 'big'];
 const SAIL_STATES: readonly ModularShipSailState[] = ['closed', 'partial', 'open'];
+const DAMAGE_STATES: readonly ShipDamageState[] = [
+  'pristine',
+  'half-damage',
+  'full-damage',
+  'destroyed',
+];
 const CANNON_HIT_AREA = new Phaser.Geom.Rectangle(300, 400, 700, 450);
 
 export const MODULAR_SHIP_SAIL_TINTS: Record<ModularShipSailColor, number> = {
@@ -101,8 +108,21 @@ const SHIP_LAYOUTS: Record<ModularShipSize, ShipLayout> = {
   },
 };
 
-function getPartTextureKey(size: ModularShipSize, part: 'base' | 'poles') {
+function getPartTextureKey(
+  size: ModularShipSize,
+  part: 'base' | 'poles',
+  damageState: ShipDamageState = 'pristine',
+) {
+  if (part === 'base' && damageState !== 'pristine') {
+    return `modular-ship-${size}-base-${damageState}`;
+  }
+
   return `modular-ship-${size}-${part}`;
+}
+
+function getBaseAssetPath(size: ModularShipSize, damageState: ShipDamageState) {
+  const suffix = damageState === 'pristine' ? '' : `_${damageState.replace('-', '_')}`;
+  return `${SHIP_PARTS_PATH}/base/pirate_ship_${size}_base${suffix}.png`;
 }
 
 function getSailsTextureKey(size: ModularShipSize, sailState: ModularShipSailState) {
@@ -114,6 +134,7 @@ export class ModularShip extends Phaser.GameObjects.Container {
   public readonly cannonDropZone: Phaser.GameObjects.Zone;
 
   private layout: ShipLayout;
+  private currentDamageState: ShipDamageState = 'pristine';
   private readonly base: Phaser.GameObjects.Image;
   private readonly poles: Phaser.GameObjects.Image;
   private readonly sails: Phaser.GameObjects.Image;
@@ -124,7 +145,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
     this.config = { ...config };
     this.layout = SHIP_LAYOUTS[config.size];
 
-    this.base = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'base'));
+    this.base = new Phaser.GameObjects.Image(
+      scene,
+      0,
+      0,
+      getPartTextureKey(config.size, 'base', this.currentDamageState),
+    );
     this.poles = new Phaser.GameObjects.Image(scene, 0, 0, getPartTextureKey(config.size, 'poles'));
     this.refreshPoles();
     this.sails = new Phaser.GameObjects.Image(
@@ -157,7 +183,12 @@ export class ModularShip extends Phaser.GameObjects.Container {
     scene.load.image(MODULAR_SHIP_CANNON_TEXTURE_KEY, `${SHIP_PARTS_PATH}/cannons/ship_cannon.png`);
 
     for (const size of SHIP_SIZES) {
-      scene.load.image(getPartTextureKey(size, 'base'), `${SHIP_PARTS_PATH}/base/pirate_ship_${size}_base.png`);
+      for (const damageState of DAMAGE_STATES) {
+        scene.load.image(
+          getPartTextureKey(size, 'base', damageState),
+          getBaseAssetPath(size, damageState),
+        );
+      }
       scene.load.image(getPartTextureKey(size, 'poles'), `${SHIP_PARTS_PATH}/poles/wood/ship_${size}_poles.png`);
 
       for (const sailState of SAIL_STATES) {
@@ -245,7 +276,7 @@ export class ModularShip extends Phaser.GameObjects.Container {
 
     this.layout = SHIP_LAYOUTS[size];
     this.config.size = size;
-    this.base.setTexture(getPartTextureKey(size, 'base'));
+    this.refreshBase();
     this.refreshPoles();
     this.refreshSails();
 
@@ -276,6 +307,24 @@ export class ModularShip extends Phaser.GameObjects.Container {
     this.config.sailState = sailState;
     this.refreshSails();
     return this;
+  }
+
+  get damageState(): ShipDamageState {
+    return this.currentDamageState;
+  }
+
+  setDamageState(damageState: ShipDamageState): this {
+    if (damageState === this.currentDamageState) {
+      return this;
+    }
+
+    this.currentDamageState = damageState;
+    this.refreshBase();
+    return this;
+  }
+
+  private refreshBase() {
+    this.base.setTexture(getPartTextureKey(this.config.size, 'base', this.currentDamageState));
   }
 
   private refreshSails() {

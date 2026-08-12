@@ -630,6 +630,9 @@ export class GameScene extends Phaser.Scene {
     this.playerShipVisual
       .setPosition(this.playerShip.x, this.playerShip.y)
       .setRotation(this.playerShip.rotation);
+    if (this.playerShipVisual.damageState !== this.playerShip.damageState) {
+      this.playerShipVisual.setDamageState(this.playerShip.damageState);
+    }
     const sailState = SAIL_STATES[this.playerShip.sailState];
     if (this.playerShipVisual.config.sailState !== sailState) {
       this.playerShipVisual.setSailState(sailState);
