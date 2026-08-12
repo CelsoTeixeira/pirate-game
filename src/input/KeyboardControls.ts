@@ -7,7 +7,6 @@ export class KeyboardControls {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys?: Record<MovementKey, Phaser.Input.Keyboard.Key>;
   private anchorToggleKey?: Phaser.Input.Keyboard.Key;
-  private aimToggleKey?: Phaser.Input.Keyboard.Key;
 
   constructor(scene: Phaser.Scene) {
     const keyboard = scene.input.keyboard;
@@ -24,7 +23,6 @@ export class KeyboardControls {
       right: Phaser.Input.Keyboard.KeyCodes.D,
     }) as Record<MovementKey, Phaser.Input.Keyboard.Key>;
     this.anchorToggleKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
-    this.aimToggleKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
   getRudder(): RudderDirection {
@@ -52,10 +50,6 @@ export class KeyboardControls {
     return Boolean(this.anchorToggleKey && Phaser.Input.Keyboard.JustDown(this.anchorToggleKey));
   }
 
-  isAimTogglePressed(): boolean {
-    return Boolean(this.aimToggleKey && Phaser.Input.Keyboard.JustDown(this.aimToggleKey));
-  }
-
   reset() {
     this.cursors?.up.reset();
     this.cursors?.down.reset();
@@ -63,6 +57,5 @@ export class KeyboardControls {
     this.cursors?.right.reset();
     Object.values(this.keys ?? {}).forEach((key) => key.reset());
     this.anchorToggleKey?.reset();
-    this.aimToggleKey?.reset();
   }
 }

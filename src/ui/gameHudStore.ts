@@ -7,6 +7,10 @@ export type MinimapPointOfInterest = Readonly<{
   size: 'small' | 'medium' | 'big';
   tileX: number;
   tileY: number;
+  occupiedCells: ReadonlyArray<Readonly<{
+    tileX: number;
+    tileY: number;
+  }>>;
 }>;
 
 export type MinimapWorldSnapshot = Readonly<{

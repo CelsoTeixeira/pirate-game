@@ -77,10 +77,29 @@ function paintPointsOfInterest(
   context.strokeStyle = '#07151d';
 
   pointsOfInterest.forEach((point) => {
-    const x = ((point.tileX + 0.5) / widthInTiles) * context.canvas.width;
-    const y = ((point.tileY + 0.5) / heightInTiles) * context.canvas.height;
+    const footprintCells = point.occupiedCells.length > 0
+      ? point.occupiedCells
+      : [{ tileX: point.tileX, tileY: point.tileY }];
+    const cellWidth = context.canvas.width / widthInTiles;
+    const cellHeight = context.canvas.height / heightInTiles;
     const radius = POI_RADIUS[point.size];
 
+    context.globalAlpha = 0.42;
+    footprintCells.forEach((cell) => {
+      const x = ((cell.tileX + 0.5) / widthInTiles) * context.canvas.width;
+      const y = ((cell.tileY + 0.5) / heightInTiles) * context.canvas.height;
+      context.fillStyle = point.environment === 'land' ? '#f5b85d' : '#67d9ed';
+      context.fillRect(
+        x - cellWidth / 2,
+        y - cellHeight / 2,
+        Math.max(1, cellWidth),
+        Math.max(1, cellHeight),
+      );
+    });
+
+    const x = ((point.tileX + 0.5) / widthInTiles) * context.canvas.width;
+    const y = ((point.tileY + 0.5) / heightInTiles) * context.canvas.height;
+    context.globalAlpha = 1;
     context.beginPath();
     if (point.environment === 'land') {
       context.rect(x - radius, y - radius, radius * 2, radius * 2);
@@ -96,6 +115,8 @@ function paintPointsOfInterest(
     context.fill();
     context.stroke();
   });
+
+  context.globalAlpha = 1;
 }
 
 function clampUnit(value: number) {

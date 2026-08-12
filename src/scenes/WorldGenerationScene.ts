@@ -6,8 +6,12 @@ import {
   type GeneratedArchipelago,
 } from '../world/generation/archipelago';
 import type {
+  GeneratedNaturalFeature,
   GeneratedPointOfInterest,
+  GeneratedSettlementModule,
+  NaturalFeatureKind,
   PoiSize,
+  SettlementModuleKind,
 } from '../world/generation/pointsOfInterest';
 
 const TERRAIN_ATLAS_KEY = 'terrain-atlas-64';
@@ -43,6 +47,23 @@ const POI_KIND_COLORS: Readonly<Record<PointOfInterestKind, number>> = {
   kraken: 0xc084fc,
   'ghost-ship': 0xa5f3fc,
   'siren-waters': 0xf472b6,
+};
+const SETTLEMENT_MODULE_COLORS: Readonly<Record<SettlementModuleKind, number>> = {
+  house: 0xf8fafc,
+  market: 0xfacc15,
+  tower: 0xcbd5e1,
+  'fortress-keep': 0xe2e8f0,
+  'pirate-hideout': 0xfb7185,
+  dock: 0x67e8f9,
+  warehouse: 0xf59e0b,
+};
+const NATURAL_FEATURE_COLORS: Readonly<Record<NaturalFeatureKind, number>> = {
+  'tree-cluster': 0x166534,
+  'palm-cluster': 0x65a30d,
+  mountain: 0x64748b,
+  'rock-cluster': 0x78716c,
+  ruins: 0xa78bfa,
+  'treasure-shrine': 0xfbbf24,
 };
 
 const LAND_POI_LEGEND: ReadonlyArray<Readonly<{
@@ -211,7 +232,7 @@ export class WorldGenerationScene extends Phaser.Scene {
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.launchWorld) && this.build) {
-      this.scene.start('ArchipelagoScene', { seed: this.seed, build: this.build });
+      this.scene.start('GameScene', { seed: this.seed, build: this.build });
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.returnToBuilder)) {
@@ -276,6 +297,14 @@ export class WorldGenerationScene extends Phaser.Scene {
       imageData.data[offset + 3] = 255;
     });
     this.terrainTexture.context.putImageData(imageData, 0, 0);
+    this.drawNaturalFeatureMarkers(
+      this.terrainTexture.context,
+      this.heightMap.naturalFeatures,
+    );
+    this.drawSettlementModuleMarkers(
+      this.terrainTexture.context,
+      this.heightMap.settlementModules,
+    );
     this.drawPointOfInterestMarkers(
       this.terrainTexture.context,
       this.heightMap.pointsOfInterest,
@@ -291,11 +320,10 @@ export class WorldGenerationScene extends Phaser.Scene {
       ? this.heightMap.pointsOfInterest.length - landPointCount
       : 0;
     this.statusText?.setText(
-      `seed ${this.seed}  |  400 islands  |  ${landPointCount} land POIs  |  ${
-        waterPointCount
-      } water encounters  |  ${
-        DEFAULT_ARCHIPELAGO_CONFIG.width
-      }x${DEFAULT_ARCHIPELAGO_CONFIG.height}`,
+      `seed ${this.seed}  |  islands 400  |  land ${landPointCount}  |  water ${waterPointCount}`
+        + `  |  modules ${this.heightMap?.settlementModules.length ?? 0}`
+        + `  |  natural ${this.heightMap?.naturalFeatures.length ?? 0}`
+        + `  |  ${DEFAULT_ARCHIPELAGO_CONFIG.width}x${DEFAULT_ARCHIPELAGO_CONFIG.height}`,
     );
   }
 
@@ -314,28 +342,54 @@ export class WorldGenerationScene extends Phaser.Scene {
       context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
 
       if (point.environment === 'land') {
-        const markerOffset = Math.floor(markerSize / 2);
-        context.fillRect(
-          point.x - markerOffset,
-          point.y - markerOffset,
-          markerSize,
-          markerSize,
-        );
+        context.globalAlpha = 0.34;
+        point.occupiedCells.forEach((cell) => context.fillRect(cell.x, cell.y, 1, 1));
+        context.globalAlpha = 1;
         context.strokeRect(
-          point.x - markerOffset + 0.5,
-          point.y - markerOffset + 0.5,
+          point.x - Math.floor(markerSize / 2) + 0.5,
+          point.y - Math.floor(markerSize / 2) + 0.5,
           markerSize - 1,
           markerSize - 1,
         );
         return;
       }
 
+      context.globalAlpha = 0.2;
+      point.occupiedCells.forEach((cell) => context.fillRect(cell.x, cell.y, 1, 1));
+      context.globalAlpha = 1;
       context.beginPath();
       context.arc(point.x + 0.5, point.y + 0.5, markerRadius, 0, Math.PI * 2);
       context.fill();
       context.stroke();
     });
 
+    context.restore();
+  }
+
+  private drawNaturalFeatureMarkers(
+    context: CanvasRenderingContext2D,
+    features: ReadonlyArray<GeneratedNaturalFeature>,
+  ) {
+    context.save();
+    context.globalAlpha = 0.75;
+    features.forEach((feature) => {
+      context.fillStyle = `#${NATURAL_FEATURE_COLORS[feature.kind].toString(16).padStart(6, '0')}`;
+      feature.occupiedCells.forEach((cell) => context.fillRect(cell.x, cell.y, 1, 1));
+    });
+    context.restore();
+  }
+
+  private drawSettlementModuleMarkers(
+    context: CanvasRenderingContext2D,
+    modules: ReadonlyArray<GeneratedSettlementModule>,
+  ) {
+    context.save();
+    modules.forEach((module) => {
+      context.fillStyle = `#${SETTLEMENT_MODULE_COLORS[module.kind].toString(16).padStart(6, '0')}`;
+      module.occupiedCells.forEach((cell) => context.fillRect(cell.x, cell.y, 1, 1));
+      context.strokeStyle = '#020617';
+      context.strokeRect(module.x + 0.1, module.y + 0.1, 0.8, 0.8);
+    });
     context.restore();
   }
 
@@ -346,7 +400,7 @@ export class WorldGenerationScene extends Phaser.Scene {
       fontSize: '8px',
     }).setOrigin(0.5);
 
-    this.add.text(24, 499, 'LAND square  size S/M/B = 3/5/7 map px', {
+    this.add.text(24, 499, 'FOOTPRINTS tinted; modules/features overlay cells', {
       color: '#bae6fd',
       fontFamily: 'monospace',
       fontSize: '9px',

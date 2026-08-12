@@ -224,7 +224,7 @@ export class ModularShipScene extends Phaser.Scene {
     this.addToUi(this.add.text(
       480,
       516,
-      '[SPACE] current game scene   [H] world generation lab',
+      '[SPACE] continue to world generation',
       {
       color: '#bae6fd',
       fontFamily: 'monospace',
@@ -234,15 +234,9 @@ export class ModularShipScene extends Phaser.Scene {
 
     this.input.keyboard?.once('keydown-SPACE', () => {
       if (!this.ship) {
-        throw new Error('Cannot start GameScene without a ship build.');
+        throw new Error('Cannot open WorldGenerationScene without a ship build.');
       }
 
-      this.scene.start('GameScene', { build: this.ship.exportBuild() });
-    });
-    this.input.keyboard?.once('keydown-H', () => {
-      if (!this.ship) {
-        throw new Error('Cannot open world generation without a ship build.');
-      }
       this.scene.start('WorldGenerationScene', { build: this.ship.exportBuild() });
     });
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {

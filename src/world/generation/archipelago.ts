@@ -1,6 +1,9 @@
 import {
-  generatePointsOfInterest,
+  generateWorldDecorations,
+  type GeneratedIslandComposition,
+  type GeneratedNaturalFeature,
   type GeneratedPointOfInterest,
+  type GeneratedSettlementModule,
 } from './pointsOfInterest';
 
 export type ArchipelagoGenerationConfig = Readonly<{
@@ -16,6 +19,9 @@ export type GeneratedArchipelago = Readonly<{
   landMask: ReadonlyArray<boolean>;
   islandIds: ReadonlyArray<number>;
   pointsOfInterest: ReadonlyArray<GeneratedPointOfInterest>;
+  islandCompositions: ReadonlyArray<GeneratedIslandComposition>;
+  settlementModules: ReadonlyArray<GeneratedSettlementModule>;
+  naturalFeatures: ReadonlyArray<GeneratedNaturalFeature>;
 }>;
 
 export const DEFAULT_ARCHIPELAGO_CONFIG: ArchipelagoGenerationConfig = Object.freeze({
@@ -61,7 +67,7 @@ export function generateArchipelago(
     islandIds,
     normalizedSeed,
   );
-  const pointsOfInterest = generatePointsOfInterest(
+  const worldDecorations = generateWorldDecorations(
     normalizedSeed,
     config.width,
     config.height,
@@ -75,7 +81,10 @@ export function generateArchipelago(
     elevations: Object.freeze(elevations),
     landMask: Object.freeze(Array.from(islandIds, (islandId) => islandId !== 0)),
     islandIds: Object.freeze(Array.from(islandIds)),
-    pointsOfInterest,
+    pointsOfInterest: worldDecorations.pointsOfInterest,
+    islandCompositions: worldDecorations.islandCompositions,
+    settlementModules: worldDecorations.settlementModules,
+    naturalFeatures: worldDecorations.naturalFeatures,
   });
 }
 

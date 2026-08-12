@@ -100,4 +100,4 @@ Build and static checks do not constitute visual or runtime acceptance. A UI cha
 - [src/ui/GameHudOverlay.tsx](../src/ui/GameHudOverlay.tsx): typed presentational HUD and explicit state mappings.
 - [src/ui/gameHudStore.ts](../src/ui/gameHudStore.ts): immutable snapshots, deduplication, and subscription bridge.
 - [src/ui/gameHud.css](../src/ui/gameHud.css): overlay layering, responsive sizing, pixel rendering, and reduced motion.
-- [src/scenes/ArchipelagoScene.ts](../src/scenes/ArchipelagoScene.ts): authoritative state publication and scene shutdown cleanup.
+- [src/scenes/GameScene.ts](../src/scenes/GameScene.ts): authoritative state publication and scene shutdown cleanup.

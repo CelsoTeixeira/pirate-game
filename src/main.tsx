@@ -1,9 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import Phaser from 'phaser';
-import { ArchipelagoScene } from './scenes/ArchipelagoScene';
 import { GameScene } from './scenes/GameScene';
 import { ModularShipScene } from './scenes/ModularShipScene';
+import { StartScene } from './scenes/StartScene';
 import { WorldGenerationScene } from './scenes/WorldGenerationScene';
 import { GameHudOverlay } from './ui/GameHudOverlay';
 import './ui/gameHud.css';
@@ -25,7 +25,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [ModularShipScene, WorldGenerationScene, ArchipelagoScene, GameScene],
+  scene: [StartScene, ModularShipScene, WorldGenerationScene, GameScene],
 };
 
 const gameUiRoot = document.getElementById('game-ui');
