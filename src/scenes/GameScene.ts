@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PlayerCombatController } from '../combat/PlayerCombatController';
+import { WindPathGuides } from '../effects/windPathGuides';
 import { WindStreaks } from '../effects/windStreaks';
 import { CannonBall } from '../entities/CannonBall';
 import { ModularShip, type ModularShipSailState, type ShipBuild } from '../entities/ModularShip';
@@ -159,6 +160,7 @@ export class GameScene extends Phaser.Scene {
   private windDebugLabels: Phaser.GameObjects.Text[] = [];
   private poiDebugLabels: Phaser.GameObjects.Text[] = [];
   private detailDebugLabels: Phaser.GameObjects.Text[] = [];
+  private windPathGuides?: WindPathGuides;
   private debugPanel?: Phaser.GameObjects.Container;
   private debugPanelBackground?: Phaser.GameObjects.Rectangle;
   private debugPanelText?: Phaser.GameObjects.Text;
@@ -357,6 +359,11 @@ export class GameScene extends Phaser.Scene {
         x: this.playerShip?.x ?? 0,
         y: this.playerShip?.y ?? 0,
       }),
+    );
+    this.windPathGuides = new WindPathGuides(
+      this,
+      this.archipelago.wind,
+      TERRAIN_TILE_SIZE,
     );
     this.syncShipVisual();
     this.cameras.main.startFollow(
@@ -1237,6 +1244,8 @@ export class GameScene extends Phaser.Scene {
     this.freeCameraPanKeys = undefined;
     this.freeCameraCursorKeys = undefined;
     this.windStreaks = undefined;
+    this.windPathGuides?.destroy();
+    this.windPathGuides = undefined;
     this.oceanTileSprite = undefined;
     if (this.textures.exists(BLOB_TERRAIN_TEXTURE_KEY)) {
       this.textures.remove(BLOB_TERRAIN_TEXTURE_KEY);

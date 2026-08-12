@@ -9,7 +9,7 @@ const WIND_STREAK_SPEED_RANGE = 160;
 const WIND_STREAK_INITIAL_FREQUENCY_MS = 250;
 const WIND_STREAK_MIN_COUNT = 18;
 const WIND_STREAK_MAX_COUNT = 42;
-const WIND_STREAK_PEAK_ALPHA = 0.6;
+const WIND_STREAK_PEAK_ALPHA = 0.82;
 const WIND_STREAK_LOCAL_WIDTH = 720;
 const WIND_STREAK_LOCAL_HEIGHT = 480;
 
@@ -55,7 +55,7 @@ export class WindStreaks {
       speedX: WIND_STREAK_MIN_SPEED,
       speedY: 0,
       rotate: 0,
-      scale: { min: 1, max: 1.5 },
+      scale: { min: 1.25, max: 1.75 },
       alpha: WIND_STREAK_PEAK_ALPHA,
       emitZone: this.createEmitZone(wind.directionRad),
     });
@@ -161,14 +161,14 @@ function ensureWindStreakTexture(scene: Phaser.Scene) {
   }
 
   const graphics = scene.add.graphics();
-  graphics.fillStyle(0xffffff, 0.35);
-  graphics.fillTriangle(0, 1.5, 10, 0, 10, 3);
-  graphics.fillRect(10, 0, 14, 3);
-  graphics.fillTriangle(24, 0, 32, 1.5, 24, 3);
-  graphics.fillStyle(0xffffff, 0.85);
-  graphics.fillTriangle(4, 1.5, 12, 0.75, 12, 2.25);
-  graphics.fillRect(12, 0.75, 12, 1.5);
-  graphics.fillTriangle(24, 0.75, 30, 1.5, 24, 2.25);
-  graphics.generateTexture(WIND_STREAK_TEXTURE, 32, 3);
+  graphics.fillStyle(0xffffff, 0.48);
+  graphics.fillTriangle(0, 2.5, 10, 0, 10, 5);
+  graphics.fillRect(10, 0, 14, 5);
+  graphics.fillTriangle(24, 0, 32, 2.5, 24, 5);
+  graphics.fillStyle(0xffffff, 1);
+  graphics.fillTriangle(4, 2.5, 12, 1.25, 12, 3.75);
+  graphics.fillRect(12, 1.25, 12, 2.5);
+  graphics.fillTriangle(24, 1.25, 30, 2.5, 24, 3.75);
+  graphics.generateTexture(WIND_STREAK_TEXTURE, 32, 5);
   graphics.destroy();
 }
