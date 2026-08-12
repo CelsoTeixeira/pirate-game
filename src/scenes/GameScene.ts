@@ -59,17 +59,14 @@ const SHIP_WORLD_SCALE = 0.6;
 const MINIMAP_POSE_INTERVAL_MS = 50;
 const MINIMAP_POSITION_EPSILON = 1;
 const MINIMAP_ROTATION_EPSILON = Phaser.Math.DegToRad(1);
-type PointOfInterestKind = GeneratedPointOfInterest['kind'];
+type WaterPointOfInterest = Extract<GeneratedPointOfInterest, { environment: 'water' }>;
+type WaterPointOfInterestKind = WaterPointOfInterest['kind'];
 type PointOfInterestTexture = Readonly<{
   key: string;
   path: string;
 }>;
 
-const POINT_OF_INTEREST_TEXTURES: Readonly<Record<PointOfInterestKind, PointOfInterestTexture>> = Object.freeze({
-  city: { key: 'poi-city', path: 'assets/poi/city.png' },
-  'trading-post': { key: 'poi-trading-post', path: 'assets/poi/trading-post.png' },
-  fortress: { key: 'poi-fortress', path: 'assets/poi/fortress.png' },
-  'pirate-hub': { key: 'poi-pirate-hub', path: 'assets/poi/pirate-hub.png' },
+const WATER_ENCOUNTER_TEXTURES: Readonly<Record<WaterPointOfInterestKind, PointOfInterestTexture>> = Object.freeze({
   'merchant-ship': { key: 'poi-merchant-ship', path: 'assets/poi/merchant-ship.png' },
   'navy-patrol': { key: 'poi-navy-patrol', path: 'assets/poi/navy-patrol.png' },
   'pirate-ship': { key: 'poi-pirate-ship', path: 'assets/poi/pirate-ship.png' },
@@ -77,7 +74,7 @@ const POINT_OF_INTEREST_TEXTURES: Readonly<Record<PointOfInterestKind, PointOfIn
   'ghost-ship': { key: 'poi-ghost-ship', path: 'assets/poi/ghost-ship.png' },
   'siren-waters': { key: 'poi-siren-waters', path: 'assets/poi/siren-waters.png' },
 });
-const POINT_OF_INTEREST_DISPLAY_SIZES: Readonly<Record<PoiSize, number>> = Object.freeze({
+const WATER_ENCOUNTER_DISPLAY_SIZES: Readonly<Record<PoiSize, number>> = Object.freeze({
   small: 24,
   medium: 40,
   big: 56,
@@ -166,7 +163,7 @@ export class GameScene extends Phaser.Scene {
         frameHeight: TERRAIN_TILE_SIZE,
       });
     }
-    for (const texture of Object.values(POINT_OF_INTEREST_TEXTURES)) {
+    for (const texture of Object.values(WATER_ENCOUNTER_TEXTURES)) {
       if (!this.textures.exists(texture.key)) {
         this.load.image(texture.key, texture.path);
       }
@@ -374,11 +371,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const point of this.archipelago.pointsOfInterest) {
-      if (point.environment === 'land') {
+      if (point.environment !== 'water') {
         continue;
       }
-      const texture = POINT_OF_INTEREST_TEXTURES[point.kind];
-      const displaySize = POINT_OF_INTEREST_DISPLAY_SIZES[point.size];
+      const texture = WATER_ENCOUNTER_TEXTURES[point.kind];
+      const displaySize = WATER_ENCOUNTER_DISPLAY_SIZES[point.size];
       this.add.image(
         (point.x + 0.5) * TERRAIN_TILE_SIZE,
         (point.y + 0.5) * TERRAIN_TILE_SIZE,

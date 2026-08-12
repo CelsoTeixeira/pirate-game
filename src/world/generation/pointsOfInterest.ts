@@ -266,6 +266,7 @@ function generateLandPointsAndModules(
 }> {
   const random = createSeededRandom((seed ^ POI_LAYOUT_SEED_SALT) >>> 0);
   const usedIslandIds = new Set<number>();
+  const reservedModuleCells = new Set<number>();
   const points: LandPointOfInterest[] = [];
   const modules: GeneratedSettlementModule[] = [];
 
@@ -307,6 +308,7 @@ function generateLandPointsAndModules(
       islandIds,
       island,
       point,
+      reservedModuleCells,
     ));
   });
 
@@ -336,6 +338,7 @@ function generateSettlementModules(
   islandIds: ArrayLike<number>,
   island: GeneratedIslandComposition,
   point: LandPointOfInterest,
+  reservedModuleCells: Set<number>,
 ): ReadonlyArray<GeneratedSettlementModule> {
   const rules = shuffleValues(
     SETTLEMENT_MODULE_RULES[point.kind].filter((rule) => rule.identities.includes(island.identity)),
@@ -359,12 +362,17 @@ function generateSettlementModules(
       .map((cell) => cell.x + cell.y * width)
       .filter((cellIndex) => (
         !usedCells.has(cellIndex)
+        && !reservedModuleCells.has(cellIndex)
         && satisfiesModuleConstraints(rule, cellIndex, width, height, islandIds)
       ));
     if (rule.kind === 'dock') {
       const dockCandidates = candidates.flatMap((landCellIndex) => (
         getCardinalNeighbors(landCellIndex, width, height)
-          .filter((waterCellIndex) => islandIds[waterCellIndex] === 0 && !usedCells.has(waterCellIndex))
+          .filter((waterCellIndex) => (
+            islandIds[waterCellIndex] === 0
+            && !usedCells.has(waterCellIndex)
+            && !reservedModuleCells.has(waterCellIndex)
+          ))
           .map((waterCellIndex) => ({ landCellIndex, waterCellIndex }))
       ));
       const dockPlacement = dockCandidates.length > 0
@@ -373,7 +381,7 @@ function generateSettlementModules(
       if (dockPlacement) {
         usedCells.add(dockPlacement.landCellIndex);
         usedCells.add(dockPlacement.waterCellIndex);
-        modules.push(createSettlementModule(
+        const module = createSettlementModule(
           point,
           island.islandId,
           'dock',
@@ -383,7 +391,9 @@ function generateSettlementModules(
             cellFromIndex(dockPlacement.waterCellIndex, width),
           ],
           modules.length,
-        ));
+        );
+        modules.push(module);
+        reserveSettlementModule(module, width, reservedModuleCells);
       }
       continue;
     }
@@ -392,14 +402,16 @@ function generateSettlementModules(
       const cellIndex = candidates[randomInteger(random, 0, candidates.length - 1)];
       usedCells.add(cellIndex);
       const cell = cellFromIndex(cellIndex, width);
-      modules.push(createSettlementModule(
+      const module = createSettlementModule(
         point,
         island.islandId,
         rule.kind,
         cell,
         [cell],
         modules.length,
-      ));
+      );
+      modules.push(module);
+      reserveSettlementModule(module, width, reservedModuleCells);
     }
   }
 
@@ -408,7 +420,7 @@ function generateSettlementModules(
     const kind = repeatableKinds[randomInteger(random, 0, repeatableKinds.length - 1)];
     const candidates = island.cells
       .map((cell) => cell.x + cell.y * width)
-      .filter((cellIndex) => !usedCells.has(cellIndex));
+      .filter((cellIndex) => !usedCells.has(cellIndex) && !reservedModuleCells.has(cellIndex));
     if (candidates.length === 0) {
       break;
     }
@@ -416,17 +428,29 @@ function generateSettlementModules(
     const cellIndex = candidates[randomInteger(random, 0, candidates.length - 1)];
     usedCells.add(cellIndex);
     const cell = cellFromIndex(cellIndex, width);
-    modules.push(createSettlementModule(
+    const module = createSettlementModule(
       point,
       island.islandId,
       kind,
       cell,
       [cell],
       modules.length,
-    ));
+    );
+    modules.push(module);
+    reserveSettlementModule(module, width, reservedModuleCells);
   }
 
   return Object.freeze(modules);
+}
+
+function reserveSettlementModule(
+  module: GeneratedSettlementModule,
+  width: number,
+  reservedModuleCells: Set<number>,
+) {
+  module.occupiedCells.forEach((cell) => {
+    reservedModuleCells.add(cell.y * width + cell.x);
+  });
 }
 
 function createSettlementModule(
